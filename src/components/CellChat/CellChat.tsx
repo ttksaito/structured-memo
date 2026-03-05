@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../store/ProjectContext';
 import { sendChatMessage } from '../../services/anthropic';
 import { ChatMessageItem } from './ChatMessage';
+import { Modal } from '../common/Modal';
 import { CellInterest } from '../../types';
 
 export function CellChat() {
@@ -10,8 +11,8 @@ export function CellChat() {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState('');
-  const [editingValue, setEditingValue] = useState(false);
-  const [editValueText, setEditValueText] = useState('');
+  const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [sourceEditText, setSourceEditText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -86,7 +87,7 @@ export function CellChat() {
         cellId: cell.id,
         chatCount: (interest?.chatCount || 0) + 1,
         lastChattedAt: new Date().toISOString(),
-        star: interest?.star || false,
+        star: false,
       };
       dispatch({ type: 'UPDATE_INTEREST', interest: newInterest });
     } catch (err: any) {
@@ -114,98 +115,96 @@ export function CellChat() {
     dispatch({ type: 'UPDATE_CELL', cell: { ...cell, annotation: newAnnotation } });
   };
 
-  const handleToggleStar = () => {
-    const newInterest: CellInterest = {
-      cellId: cell.id,
-      chatCount: interest?.chatCount || 0,
-      lastChattedAt: interest?.lastChattedAt || null,
-      star: !(interest?.star || false),
-    };
-    dispatch({ type: 'UPDATE_INTEREST', interest: newInterest });
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 12 }}>
       {/* Cell info header */}
       <div style={{ flexShrink: 0, borderBottom: '1px solid #e5e7eb', paddingBottom: 10, marginBottom: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#9ca3af' }}>{row.name}</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2937' }}>{column.name}</div>
-          </div>
-          <button
-            onClick={handleToggleStar}
-            style={{
-              background: 'none',
-              border: 'none',
-              fontSize: 20,
-              cursor: 'pointer',
-              color: interest?.star ? '#f59e0b' : '#d1d5db',
-            }}
-          >
-            &#9733;
-          </button>
+        <div>
+          <div style={{ fontSize: 11, color: '#9ca3af' }}>{row.name}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2937' }}>{column.name}</div>
         </div>
-        {editingValue ? (
-          <textarea
-            value={editValueText}
-            onChange={e => setEditValueText(e.target.value)}
-            onBlur={() => {
-              dispatch({ type: 'UPDATE_CELL', cell: { ...cell, value: editValueText } });
-              setEditingValue(false);
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Escape') { setEditingValue(false); }
-              if (e.key === 'Enter' && e.ctrlKey) {
-                dispatch({ type: 'UPDATE_CELL', cell: { ...cell, value: editValueText } });
-                setEditingValue(false);
-              }
-            }}
-            autoFocus
+        {/* Meta info + Source button */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, fontSize: 11, color: '#9ca3af' }}>
+          <button
+            onClick={() => { setSourceEditText(cell.value); setSourceModalOpen(true); }}
             style={{
-              width: '100%',
-              marginTop: 6,
-              minHeight: 60,
-              padding: '4px 6px',
-              border: '1px solid #3b82f6',
+              padding: '2px 8px',
+              fontSize: 11,
+              background: '#f3f4f6',
+              border: '1px solid #d1d5db',
               borderRadius: 4,
-              fontSize: 12,
-              lineHeight: 1.5,
-              resize: 'vertical',
-              fontFamily: 'inherit',
+              cursor: 'pointer',
+              color: '#374151',
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
             }}
-          />
-        ) : (
-          <div
-            onClick={() => { setEditValueText(cell.value); setEditingValue(true); }}
-            title="クリックして編集"
-            style={{
-              fontSize: 12,
-              color: cell.value ? '#6b7280' : '#d1d5db',
-              marginTop: 6,
-              lineHeight: 1.5,
-              maxHeight: 60,
-              overflow: 'auto',
-              whiteSpace: 'pre-wrap',
-              cursor: 'text',
-              padding: '2px 4px',
-              borderRadius: 4,
-              border: '1px solid transparent',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.border = '1px solid #e5e7eb')}
-            onMouseLeave={e => (e.currentTarget.style.border = '1px solid transparent')}
           >
-            {cell.value || '（クリックして入力）'}
-          </div>
-        )}
-        {/* Meta info */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 6, fontSize: 11, color: '#9ca3af' }}>
+            ソース
+          </button>
           <span>会話: {interest?.chatCount || 0}回</span>
           {interest?.lastChattedAt && (
             <span>最終: {new Date(interest.lastChattedAt).toLocaleDateString('ja-JP')}</span>
           )}
         </div>
       </div>
+
+      {/* Source modal */}
+      <Modal
+        open={sourceModalOpen}
+        onClose={() => setSourceModalOpen(false)}
+        title={`ソース — ${column.name}`}
+        maxWidth={800}
+      >
+        <textarea
+          value={sourceEditText}
+          onChange={e => setSourceEditText(e.target.value)}
+          rows={20}
+          style={{
+            width: '100%',
+            padding: '8px 10px',
+            border: '1px solid #d1d5db',
+            borderRadius: 6,
+            fontSize: 13,
+            lineHeight: 1.6,
+            resize: 'vertical',
+            fontFamily: 'inherit',
+            boxSizing: 'border-box',
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+          <button
+            onClick={() => setSourceModalOpen(false)}
+            style={{
+              padding: '6px 16px',
+              background: '#f3f4f6',
+              border: '1px solid #d1d5db',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 13,
+            }}
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={() => {
+              dispatch({ type: 'UPDATE_CELL', cell: { ...cell, value: sourceEditText } });
+              setSourceModalOpen(false);
+            }}
+            style={{
+              padding: '6px 16px',
+              background: '#3b82f6',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            保存
+          </button>
+        </div>
+      </Modal>
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>

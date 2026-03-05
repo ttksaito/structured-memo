@@ -139,14 +139,14 @@ export function DataTable() {
     const maxOrder = rows.length > 0 ? Math.max(...rows.map(r => r.order)) + 1 : 0;
     const rowId = 'row-' + Date.now();
     const row: Row = { id: rowId, name: rowName, order: maxOrder };
-    dispatch({ type: 'ADD_ROW', row });
-    // 各列のセル値を設定
-    allColumns.forEach(col => {
-      const val = newRowValues[col.id] || '';
-      if (val) {
-        dispatch({ type: 'UPDATE_CELL', cell: { id: `${rowId}-${col.id}`, rowId, columnId: col.id, value: val, annotation: '' } });
-      }
-    });
+    const cells = allColumns.map(col => ({
+      id: `${rowId}-${col.id}`,
+      rowId,
+      columnId: col.id,
+      value: newRowValues[col.id] || '',
+      annotation: '',
+    }));
+    dispatch({ type: 'ADD_ROW', row, cells });
     setNewRowValues({});
     setShowAddRow(false);
   };
@@ -305,7 +305,7 @@ export function DataTable() {
                       style={{
                         padding: '8px 10px',
                         borderBottom: '1px solid #e5e7eb',
-                        background: isSelected ? '#dbeafe' : scoreToColor(score),
+                        background: isSelected ? '#dbeafe' : '#fff',
                         cursor: 'pointer',
                         maxWidth: 300,
                         verticalAlign: 'top',
@@ -348,11 +348,14 @@ export function DataTable() {
                             {cell?.value || ''}
                           </div>
                           {(interest?.chatCount ?? 0) > 0 && (
-                            <div style={{ display: 'flex', gap: 8, marginTop: 5, fontSize: 12, color: '#6b7280', fontWeight: 500 }}>
-                              <span>{interest!.chatCount}回</span>
-                              {interest!.lastChattedAt && (
-                                <span>{new Date(interest!.lastChattedAt).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}</span>
-                              )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: '#6b7280', fontWeight: 500 }}>
+                              <span>チャット数={interest!.chatCount}</span>
+                              {interest!.lastChattedAt && (() => {
+                                const d = new Date(interest!.lastChattedAt);
+                                return (
+                                  <span>{`${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}/${d.toLocaleDateString('en-US', { weekday: 'short' })}`}</span>
+                                );
+                              })()}
                             </div>
                           )}
                         </>

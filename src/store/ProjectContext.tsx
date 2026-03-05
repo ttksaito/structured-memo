@@ -80,7 +80,7 @@ function reducer(state: AppState, action: AppAction): AppState {
     }
     case 'ADD_ROW': {
       if (!state.projectData) return state;
-      const newCells = state.projectData.columns.map(col => ({
+      const newCells = action.cells ?? state.projectData.columns.map(col => ({
         id: `${action.row.id}-${col.id}`,
         rowId: action.row.id,
         columnId: col.id,
@@ -227,7 +227,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         case 'ADD_ROW': {
           if (projectId) {
             const cols = currentState.projectData?.columns || [];
-            const newCells = cols.map(col => ({
+            const newCells = action.cells ?? cols.map(col => ({
               id: `${action.row.id}-${col.id}`,
               rowId: action.row.id,
               columnId: col.id,

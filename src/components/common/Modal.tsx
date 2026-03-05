@@ -5,9 +5,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  maxWidth?: number;
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, maxWidth = 480 }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         border: 'none',
         borderRadius: 8,
         padding: 24,
-        maxWidth: 480,
+        maxWidth: maxWidth,
         width: '90%',
         boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
         position: 'fixed',

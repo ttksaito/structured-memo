@@ -77,7 +77,7 @@ export type AppAction =
   | { type: 'UPDATE_COLUMN'; column: Column }
   | { type: 'DELETE_COLUMN'; columnId: string }
   | { type: 'REORDER_COLUMNS'; columns: Column[] }
-  | { type: 'ADD_ROW'; row: Row }
+  | { type: 'ADD_ROW'; row: Row; cells?: Cell[] }
   | { type: 'DELETE_ROW'; rowId: string }
   | { type: 'UPDATE_CELL'; cell: Cell }
   | { type: 'SELECT_CELL'; cellId: string | null }

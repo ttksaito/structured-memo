@@ -1,10 +1,34 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { ChatMessage as ChatMessageType } from '../../types';
 
 interface Props {
   message: ChatMessageType;
 }
+
+const tableStyle: React.CSSProperties = {
+  borderCollapse: 'collapse',
+  width: '100%',
+  marginTop: 8,
+  marginBottom: 8,
+  fontSize: 12,
+};
+
+const thStyle: React.CSSProperties = {
+  border: '1px solid #d1d5db',
+  padding: '5px 10px',
+  background: '#e5e7eb',
+  fontWeight: 600,
+  textAlign: 'left',
+  whiteSpace: 'nowrap',
+};
+
+const tdStyle: React.CSSProperties = {
+  border: '1px solid #d1d5db',
+  padding: '5px 10px',
+  verticalAlign: 'top',
+};
 
 export function ChatMessageItem({ message }: Props) {
   const isUser = message.role === 'user';
@@ -33,7 +57,16 @@ export function ChatMessageItem({ message }: Props) {
           <span style={{ whiteSpace: 'pre-wrap' }}>{message.content}</span>
         ) : (
           <div className="markdown-body">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                table: ({ children }) => <table style={tableStyle}>{children}</table>,
+                th: ({ children }) => <th style={thStyle}>{children}</th>,
+                td: ({ children }) => <td style={tdStyle}>{children}</td>,
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
         )}
       </div>
