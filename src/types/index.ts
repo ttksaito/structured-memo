@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   createdAt: string;
+  memo: string;
 }
 
 export interface Column {
@@ -16,6 +17,7 @@ export interface Row {
   id: string;
   name: string;
   order: number;
+  memo: string;
 }
 
 export interface Cell {
@@ -85,4 +87,6 @@ export type AppAction =
   | { type: 'UPDATE_INTEREST'; interest: CellInterest }
   | { type: 'SET_API_KEY'; apiKey: string }
   | { type: 'SET_SEARCH_QUERY'; query: string }
-  | { type: 'FOCUS_COLUMN'; columnId: string | null };
+  | { type: 'FOCUS_COLUMN'; columnId: string | null }
+  | { type: 'UPDATE_PROJECT_MEMO'; projectId: string; memo: string }
+  | { type: 'UPDATE_ROW_MEMO'; rowId: string; memo: string };

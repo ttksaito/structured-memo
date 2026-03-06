@@ -4,7 +4,7 @@ import { Project, ProjectData, Column, Row, Cell, ChatMessage, CellInterest, Cha
 // ── Projects ──────────────────────────────────────────────
 export async function dbLoadProjects(): Promise<Project[]> {
   const { data } = await supabase.from('projects').select('*').order('created_at');
-  return (data || []).map(p => ({ id: p.id, name: p.name, createdAt: p.created_at }));
+  return (data || []).map(p => ({ id: p.id, name: p.name, createdAt: p.created_at, memo: p.memo ?? '' }));
 }
 
 export async function dbSaveProject(project: Project): Promise<void> {
@@ -12,7 +12,12 @@ export async function dbSaveProject(project: Project): Promise<void> {
     id: project.id,
     name: project.name,
     created_at: project.createdAt,
+    memo: project.memo ?? '',
   });
+}
+
+export async function dbUpdateProjectMemo(projectId: string, memo: string): Promise<void> {
+  await supabase.from('projects').update({ memo }).eq('id', projectId);
 }
 
 export async function dbDeleteProject(projectId: string): Promise<void> {
@@ -49,7 +54,7 @@ export async function dbLoadProjectData(projectId: string): Promise<ProjectData 
     id: c.id, name: c.name, description: c.description, order: c.sort_order, visible: c.visible,
   }));
   const rows: Row[] = (rowRes.data || []).map(r => ({
-    id: r.id, name: r.name, order: r.sort_order,
+    id: r.id, name: r.name, order: r.sort_order, memo: r.memo ?? '',
   }));
 
   const rowIds = rows.map(r => r.id);
@@ -94,7 +99,7 @@ export async function dbSaveProjectData(projectId: string, data: ProjectData): P
   }
   if (data.rows.length > 0) {
     await supabase.from('rows').upsert(
-      data.rows.map(r => ({ id: r.id, project_id: projectId, name: r.name, sort_order: r.order }))
+      data.rows.map(r => ({ id: r.id, project_id: projectId, name: r.name, sort_order: r.order, memo: r.memo ?? '' }))
     );
   }
   if (data.cells.length > 0) {
@@ -134,8 +139,12 @@ export async function dbReorderColumns(columns: Column[]): Promise<void> {
   ));
 }
 
+export async function dbUpdateRowMemo(rowId: string, memo: string): Promise<void> {
+  await supabase.from('rows').update({ memo }).eq('id', rowId);
+}
+
 export async function dbUpsertRow(row: Row, projectId: string, cells: Cell[]): Promise<void> {
-  await supabase.from('rows').upsert({ id: row.id, project_id: projectId, name: row.name, sort_order: row.order });
+  await supabase.from('rows').upsert({ id: row.id, project_id: projectId, name: row.name, sort_order: row.order, memo: row.memo ?? '' });
   if (cells.length > 0) {
     await supabase.from('cells').upsert(
       cells.map(c => ({ id: c.id, row_id: c.rowId, column_id: c.columnId, value: c.value, annotation: c.annotation }))

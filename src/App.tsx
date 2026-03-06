@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useApp } from './store/ProjectContext';
 import { ProjectList } from './components/Home/ProjectList';
 import { ColumnNav } from './components/ColumnNav/ColumnNav';
@@ -12,6 +12,13 @@ export default function App() {
   const [rightOpen, setRightOpen] = useState(true);
   const [leftWidth, setLeftWidth] = useState(220);
   const [rightWidth, setRightWidth] = useState(340);
+  const [memoText, setMemoText] = useState('');
+  const memoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentProject = state.projects.find(p => p.id === state.currentProjectId);
+
+  // 選択中セルの行を特定
+  const selectedCell = state.projectData?.cells.find(c => c.id === state.selectedCellId);
+  const selectedRow = state.projectData?.rows.find(r => r.id === selectedCell?.rowId) ?? null;
 
   const draggingLeft = useRef(false);
   const draggingRight = useRef(false);
@@ -64,11 +71,26 @@ export default function App() {
     window.addEventListener('mouseup', onUp);
   }, [rightWidth]);
 
+  // 選択行が変わったらそのメモをロード
+  useEffect(() => {
+    setMemoText(selectedRow?.memo ?? '');
+  }, [selectedRow?.id]);
+
+  const handleMemoChange = (value: string) => {
+    setMemoText(value);
+    if (memoSaveTimer.current) clearTimeout(memoSaveTimer.current);
+    memoSaveTimer.current = setTimeout(() => {
+      if (selectedRow) {
+        dispatch({ type: 'UPDATE_ROW_MEMO', rowId: selectedRow.id, memo: value });
+      }
+    }, 500);
+  };
+
   if (state.view === 'home') {
     return <ProjectList />;
   }
 
-  const project = state.projects.find(p => p.id === state.currentProjectId);
+  const project = currentProject;
 
   const resizeHandleStyle: React.CSSProperties = {
     width: 5,
@@ -155,9 +177,58 @@ export default function App() {
           </>
         )}
 
-        {/* Center: Table */}
-        <div style={{ flex: 1, overflow: 'hidden', background: '#fff', minWidth: 0 }}>
-          <DataTable />
+        {/* Center: Table + Memo */}
+        <div style={{ flex: 1, overflow: 'hidden', background: '#fff', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 4, overflow: 'hidden', minHeight: 0 }}>
+            <DataTable />
+          </div>
+          {/* Memo panel */}
+          <div style={{
+            flex: 1,
+            minHeight: 0,
+            borderTop: '2px solid #e5e7eb',
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#fafafa',
+          }}>
+            <div style={{
+              padding: '4px 12px',
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#6b7280',
+              background: '#f3f4f6',
+              borderBottom: '1px solid #e5e7eb',
+              flexShrink: 0,
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+            }}>
+              <span>メモ</span>
+              {selectedRow && (
+                <span style={{ color: '#374151', fontWeight: 500 }}>{selectedRow.name}</span>
+              )}
+            </div>
+            <textarea
+              value={memoText}
+              onChange={e => handleMemoChange(e.target.value)}
+              placeholder={selectedRow ? `${selectedRow.name} のメモ...` : '行を選択するとメモを入力できます'}
+              disabled={!selectedRow}
+              style={{
+                flex: 1,
+                width: '100%',
+                border: 'none',
+                outline: 'none',
+                resize: 'none',
+                padding: '8px 12px',
+                fontSize: 13,
+                fontFamily: 'inherit',
+                background: '#fafafa',
+                color: '#1f2937',
+                lineHeight: 1.6,
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
         </div>
 
         {/* Right resize handle */}
