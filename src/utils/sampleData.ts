@@ -11,9 +11,9 @@ export function createSampleData(): ProjectData {
   ];
 
   const rows: Row[] = [
-    { id: 'row-1', name: '株式会社UNCOVER TRUTH', order: 0 },
-    { id: 'row-2', name: 'ファインディ株式会社', order: 1 },
-    { id: 'row-3', name: '株式会社電通デジタル', order: 2 },
+    { id: 'row-1', name: '株式会社UNCOVER TRUTH', order: 0, memo: '' },
+    { id: 'row-2', name: 'ファインディ株式会社', order: 1, memo: '' },
+    { id: 'row-3', name: '株式会社電通デジタル', order: 2, memo: '' },
   ];
 
   const cellData: Record<string, Record<string, string>> = {

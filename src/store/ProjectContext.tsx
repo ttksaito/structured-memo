@@ -199,7 +199,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let projects = await dbLoadProjects();
         if (projects.length === 0) {
           const seedId = 'proj-seed-org';
-          const seedProject = { id: seedId, name: '組織研究', createdAt: new Date().toISOString() };
+          const seedProject = { id: seedId, name: '組織研究', createdAt: new Date().toISOString(), memo: '' };
           await dbSaveProject(seedProject);
           const sampleData = createSampleData();
           await dbSaveProjectData(seedId, sampleData);

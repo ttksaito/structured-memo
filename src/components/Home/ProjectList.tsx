@@ -14,7 +14,7 @@ export function ProjectList() {
   const handleCreate = async () => {
     if (!newName.trim()) return;
     const id = 'proj-' + Date.now();
-    const project = { id, name: newName.trim(), createdAt: new Date().toISOString() };
+    const project = { id, name: newName.trim(), createdAt: new Date().toISOString(), memo: '' };
     const data = useSample ? createSampleData() : { columns: [], rows: [], cells: [], threads: [], interests: [] };
     dispatch({ type: 'ADD_PROJECT', project });
     if (data.columns.length > 0) {

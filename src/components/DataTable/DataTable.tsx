@@ -138,7 +138,7 @@ export function DataTable() {
     if (!rowName) return;
     const maxOrder = rows.length > 0 ? Math.max(...rows.map(r => r.order)) + 1 : 0;
     const rowId = 'row-' + Date.now();
-    const row: Row = { id: rowId, name: rowName, order: maxOrder };
+    const row: Row = { id: rowId, name: rowName, order: maxOrder, memo: '' };
     const cells = allColumns.map(col => ({
       id: `${rowId}-${col.id}`,
       rowId,
