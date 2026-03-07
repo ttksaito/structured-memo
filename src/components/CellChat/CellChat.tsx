@@ -5,7 +5,24 @@ import { ChatMessageItem } from './ChatMessage';
 import { Modal } from '../common/Modal';
 import { CellInterest } from '../../types';
 
-export function CellChat() {
+function ChatToggleButton({ onToggle }: { onToggle?: () => void }) {
+  if (!onToggle) return null;
+  return (
+    <button
+      onClick={onToggle}
+      title="チャットを隠す"
+      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#9ca3af', display: 'flex', alignItems: 'center', flexShrink: 0 }}
+    >
+      <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1.5" y="1.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+        <line x1="12" y1="1.5" x2="12" y2="16.5" stroke="currentColor" strokeWidth="1.4"/>
+        <rect x="12" y="1.5" width="4.5" height="15" rx="1.5" fill="currentColor" opacity="0.25"/>
+      </svg>
+    </button>
+  );
+}
+
+export function CellChat({ onToggle }: { onToggle?: () => void }) {
   const { state, dispatch } = useApp();
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -25,8 +42,11 @@ export function CellChat() {
 
   if (!state.projectData || !state.selectedCellId) {
     return (
-      <div style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#9ca3af', fontSize: 14, textAlign: 'center' }}>
-        セルを選択してチャットを開始
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <ChatToggleButton onToggle={onToggle} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: 24 }}>
+          セルを選択してチャットを開始
+        </div>
       </div>
     );
   }
@@ -119,9 +139,12 @@ export function CellChat() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: 12 }}>
       {/* Cell info header */}
       <div style={{ flexShrink: 0, borderBottom: '1px solid #e5e7eb', paddingBottom: 10, marginBottom: 8 }}>
-        <div>
-          <div style={{ fontSize: 11, color: '#9ca3af' }}>{row.name}</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2937' }}>{column.name}</div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+          <ChatToggleButton onToggle={onToggle} />
+          <div>
+            <div style={{ fontSize: 11, color: '#9ca3af' }}>{row.name}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2937' }}>{column.name}</div>
+          </div>
         </div>
         {/* Meta info + Source button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, fontSize: 11, color: '#9ca3af' }}>

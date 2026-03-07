@@ -3,7 +3,7 @@ import { useApp } from '../../store/ProjectContext';
 import { Column } from '../../types';
 import { Modal } from '../common/Modal';
 
-export function ColumnNav() {
+export function ColumnNav({ onToggle }: { onToggle?: () => void }) {
   const { state, dispatch } = useApp();
   const [editingCol, setEditingCol] = useState<Column | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -77,21 +77,19 @@ export function ColumnNav() {
     <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#374151' }}>列一覧</h3>
-        <button
-          onClick={() => setShowAdd(true)}
-          style={{
-            background: '#3b82f6',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 4,
-            padding: '4px 10px',
-            fontSize: 12,
-            cursor: 'pointer',
-            fontWeight: 600,
-          }}
-        >
-          + 追加
-        </button>
+        {onToggle && (
+          <button
+            onClick={onToggle}
+            title="列一覧を隠す"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#9ca3af', display: 'flex', alignItems: 'center' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="1.5" y="1.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+              <line x1="6" y1="1.5" x2="6" y2="16.5" stroke="currentColor" strokeWidth="1.4"/>
+              <rect x="1.5" y="1.5" width="4.5" height="15" rx="1.5" fill="currentColor" opacity="0.25"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -137,6 +135,25 @@ export function ColumnNav() {
           </div>
         ))}
       </div>
+
+      <button
+        onClick={() => setShowAdd(true)}
+        style={{
+          flexShrink: 0,
+          marginTop: 8,
+          width: '100%',
+          background: '#3b82f6',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 4,
+          padding: '6px 10px',
+          fontSize: 12,
+          cursor: 'pointer',
+          fontWeight: 600,
+        }}
+      >
+        + 追加
+      </button>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="列を追加">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

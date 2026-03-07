@@ -160,13 +160,21 @@ export function DataTable() {
     <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Header */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-        <input
-          value={searchInput}
-          onChange={e => setSearchInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') dispatch({ type: 'SET_SEARCH_QUERY', query: searchInput }); }}
-          placeholder="検索..."
-          style={{ flex: 1, minWidth: 120, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}
-        />
+        <div style={{ flex: 1, minWidth: 120, position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <input
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') dispatch({ type: 'SET_SEARCH_QUERY', query: searchInput }); }}
+            placeholder="検索..."
+            style={{ width: '100%', padding: '8px 30px 8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
+          />
+          {searchInput && (
+            <button
+              onClick={() => { setSearchInput(''); dispatch({ type: 'SET_SEARCH_QUERY', query: '' }); }}
+              style={{ position: 'absolute', right: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 16, lineHeight: 1, padding: 2 }}
+            >×</button>
+          )}
+        </div>
         <button
           onClick={() => dispatch({ type: 'SET_SEARCH_QUERY', query: searchInput })}
           style={{ background: '#6b7280', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}

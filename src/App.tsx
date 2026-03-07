@@ -101,18 +101,6 @@ export default function App() {
     zIndex: 10,
   };
 
-  const toggleBtnStyle: React.CSSProperties = {
-    background: '#f3f4f6',
-    border: '1px solid #e5e7eb',
-    borderRadius: 4,
-    cursor: 'pointer',
-    fontSize: 12,
-    padding: '2px 6px',
-    color: '#374151',
-    fontWeight: 600,
-    lineHeight: 1,
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       {/* Top bar */}
@@ -143,18 +131,12 @@ export default function App() {
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#1f2937', flex: 1 }}>
           {project?.name || 'プロジェクト'}
         </h2>
-        <button style={toggleBtnStyle} onClick={() => setLeftOpen(v => !v)}>
-          {leftOpen ? '◀ 列一覧' : '▶ 列一覧'}
-        </button>
-        <button style={toggleBtnStyle} onClick={() => setRightOpen(v => !v)}>
-          {rightOpen ? 'チャット ▶' : 'チャット ◀'}
-        </button>
       </div>
 
       {/* 3-column layout */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
         {/* Left: Column Nav */}
-        {leftOpen && (
+        {leftOpen ? (
           <>
             <div
               style={{
@@ -166,7 +148,7 @@ export default function App() {
                 flexShrink: 0,
               }}
             >
-              <ColumnNav />
+              <ColumnNav onToggle={() => setLeftOpen(false)} />
             </div>
             {/* Left resize handle */}
             <div
@@ -175,6 +157,30 @@ export default function App() {
               title="ドラッグでサイズ変更"
             />
           </>
+        ) : (
+          <div
+            style={{
+              width: 28,
+              borderRight: '1px solid #e5e7eb',
+              background: '#fafafa',
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              paddingTop: 10,
+            }}
+          >
+            <button
+              onClick={() => setLeftOpen(true)}
+              title="列一覧を表示"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#9ca3af', display: 'flex' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="1.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+                <line x1="6" y1="1.5" x2="6" y2="16.5" stroke="currentColor" strokeWidth="1.4"/>
+              </svg>
+            </button>
+          </div>
         )}
 
         {/* Center: Table + Memo */}
@@ -211,6 +217,7 @@ export default function App() {
             <textarea
               value={memoText}
               onChange={e => handleMemoChange(e.target.value)}
+              spellCheck={false}
               placeholder={selectedRow ? `${selectedRow.name} のメモ...` : '行を選択するとメモを入力できます'}
               disabled={!selectedRow}
               style={{
@@ -231,15 +238,14 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right resize handle */}
-        {rightOpen && (
+        {/* Right: Cell Chat */}
+        {rightOpen ? (
           <>
             <div
               style={{ ...resizeHandleStyle, borderLeft: '1px solid #e5e7eb' }}
               onMouseDown={onRightDragStart}
               title="ドラッグでサイズ変更"
             />
-            {/* Right: Cell Chat */}
             <div
               style={{
                 width: rightWidth,
@@ -250,9 +256,33 @@ export default function App() {
                 flexShrink: 0,
               }}
             >
-              <CellChat />
+              <CellChat onToggle={() => setRightOpen(false)} />
             </div>
           </>
+        ) : (
+          <div
+            style={{
+              width: 28,
+              borderLeft: '1px solid #e5e7eb',
+              background: '#fafafa',
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              paddingTop: 10,
+            }}
+          >
+            <button
+              onClick={() => setRightOpen(true)}
+              title="チャットを表示"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#9ca3af', display: 'flex' }}
+            >
+              <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1.5" y="1.5" width="15" height="15" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+                <line x1="12" y1="1.5" x2="12" y2="16.5" stroke="currentColor" strokeWidth="1.4"/>
+              </svg>
+            </button>
+          </div>
         )}
       </div>
     </div>
