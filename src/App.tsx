@@ -12,8 +12,36 @@ export default function App() {
   const [rightOpen, setRightOpen] = useState(true);
   const [leftWidth, setLeftWidth] = useState(220);
   const [rightWidth, setRightWidth] = useState(340);
+  const [memoOpen, setMemoOpen] = useState(true);
+  const [memoHeight, setMemoHeight] = useState(160);
   const [memoText, setMemoText] = useState('');
   const memoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draggingMemo = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
+
+  const onMemoDragStart = useCallback((e: React.MouseEvent) => {
+    draggingMemo.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = memoHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingMemo.current) return;
+      const delta = dragStartY.current - ev.clientY;
+      setMemoHeight(Math.max(80, Math.min(500, dragStartHeight.current + delta)));
+    };
+    const onUp = () => {
+      draggingMemo.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [memoHeight]);
   const currentProject = state.projects.find(p => p.id === state.currentProjectId);
 
   // 選択中セルの行を特定
@@ -190,20 +218,35 @@ export default function App() {
           </div>
           {/* Memo panel */}
           <div style={{
-            flex: 1,
-            minHeight: 0,
+            flexShrink: 0,
             borderTop: '2px solid #e5e7eb',
             display: 'flex',
             flexDirection: 'column',
             background: '#fafafa',
+            height: memoOpen ? memoHeight : 'auto',
           }}>
+            {/* Resize handle */}
+            {memoOpen && (
+              <div
+                onMouseDown={onMemoDragStart}
+                title="ドラッグでサイズ変更"
+                style={{
+                  height: 5,
+                  cursor: 'row-resize',
+                  background: 'transparent',
+                  flexShrink: 0,
+                  position: 'relative',
+                  zIndex: 10,
+                }}
+              />
+            )}
             <div style={{
-              padding: '4px 12px',
+              padding: '4px 8px 4px 12px',
               fontSize: 11,
               fontWeight: 600,
               color: '#6b7280',
               background: '#f3f4f6',
-              borderBottom: '1px solid #e5e7eb',
+              borderBottom: memoOpen ? '1px solid #e5e7eb' : 'none',
               flexShrink: 0,
               display: 'flex',
               gap: 8,
@@ -213,28 +256,49 @@ export default function App() {
               {selectedRow && (
                 <span style={{ color: '#374151', fontWeight: 500 }}>{selectedRow.name}</span>
               )}
+              <button
+                onClick={() => setMemoOpen(o => !o)}
+                title={memoOpen ? 'メモを閉じる' : 'メモを開く'}
+                style={{
+                  marginLeft: 'auto',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#9ca3af',
+                  padding: '2px 4px',
+                  fontSize: 12,
+                  lineHeight: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {memoOpen ? '▼' : '▲'}
+              </button>
             </div>
-            <textarea
-              value={memoText}
-              onChange={e => handleMemoChange(e.target.value)}
-              spellCheck={false}
-              placeholder={selectedRow ? `${selectedRow.name} のメモ...` : '行を選択するとメモを入力できます'}
-              disabled={!selectedRow}
-              style={{
-                flex: 1,
-                width: '100%',
-                border: 'none',
-                outline: 'none',
-                resize: 'none',
-                padding: '8px 12px',
-                fontSize: 13,
-                fontFamily: 'inherit',
-                background: '#fafafa',
-                color: '#1f2937',
-                lineHeight: 1.6,
-                boxSizing: 'border-box',
-              }}
-            />
+            {memoOpen && (
+              <textarea
+                value={memoText}
+                onChange={e => handleMemoChange(e.target.value)}
+                spellCheck={false}
+                placeholder={selectedRow ? `${selectedRow.name} のメモ...` : '行を選択するとメモを入力できます'}
+                disabled={!selectedRow}
+                style={{
+                  flex: 1,
+                  width: '100%',
+                  border: 'none',
+                  outline: 'none',
+                  resize: 'none',
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  background: '#fafafa',
+                  color: '#1f2937',
+                  lineHeight: 1.6,
+                  boxSizing: 'border-box',
+                  minHeight: 0,
+                }}
+              />
+            )}
           </div>
         </div>
 
