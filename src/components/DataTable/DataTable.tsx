@@ -422,8 +422,21 @@ export function DataTable() {
       </div>
 
       {/* 行追加モーダル */}
-      <Modal open={showAddRow} onClose={() => setShowAddRow(false)} title="行を追加">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxHeight: '70vh', overflowY: 'auto', paddingRight: 4 }}>
+      <Modal open={showAddRow} onClose={() => setShowAddRow(false)} title="行を追加" maxWidth={880}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateRows: 'repeat(2, auto)',
+            gridAutoFlow: 'column',
+            gridAutoColumns: 'minmax(220px, 1fr)',
+            gap: '14px 20px',
+            maxHeight: '70vh',
+            overflowX: 'auto',
+            overflowY: 'auto',
+            paddingRight: 4,
+            paddingBottom: 4,
+          }}
+        >
           {allColumns.map((col, idx) => {
             const isName = col.id === 'col-name';
             return (

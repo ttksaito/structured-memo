@@ -1,5 +1,7 @@
 import { Column, Row, Cell, ChatMessage } from '../types';
 
+export type ResponseLength = 'short' | 'normal' | 'detailed';
+
 interface ChatContext {
   row: Row;
   column: Column;
@@ -7,7 +9,14 @@ interface ChatContext {
   rowCells: Cell[];
   columns: Column[];
   history: ChatMessage[];
+  responseLength?: ResponseLength;
 }
+
+const lengthInstruction: Record<ResponseLength, string> = {
+  short: '- 回答は短く簡潔にまとめてください（3〜5文程度）',
+  normal: '- 回答は適度な長さでまとめてください',
+  detailed: '- 回答は詳しく丁寧に説明してください。背景・理由・具体例なども含めてください',
+};
 
 function buildSystemPrompt(ctx: ChatContext): string {
   const rowInfo = ctx.columns
@@ -32,7 +41,7 @@ ${ctx.column.description ? `列の説明: ${ctx.column.description}` : ''}
 ${ctx.cell.annotation ? `注釈: ${ctx.cell.annotation}` : ''}
 
 ## 指示
-- 回答は簡潔にしてください
+${lengthInstruction[ctx.responseLength ?? 'normal']}
 - 必要に応じて、セルの値や注釈に保存すべき要約を提案してください
 - ユーザーの質問に対して、構造化された情報を提供してください`;
 }

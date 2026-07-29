@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../store/ProjectContext';
-import { sendChatMessage } from '../../services/anthropic';
+import { sendChatMessage, ResponseLength } from '../../services/anthropic';
 import { ChatMessageItem } from './ChatMessage';
 import { Modal } from '../common/Modal';
 import { CellInterest } from '../../types';
@@ -30,6 +30,7 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
   const [error, setError] = useState('');
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [sourceEditText, setSourceEditText] = useState('');
+  const [responseLength, setResponseLength] = useState<ResponseLength>('normal');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -89,7 +90,7 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
     try {
       const fullText = await sendChatMessage(
         state.apiKey,
-        { row, column, cell, rowCells, columns: state.projectData!.columns, history: messages },
+        { row, column, cell, rowCells, columns: state.projectData!.columns, history: messages, responseLength },
         userMessage,
         (text) => setStreamingText(text)
       );
@@ -177,6 +178,7 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
         onClose={() => setSourceModalOpen(false)}
         title={`ソース — ${column.name}`}
         maxWidth={800}
+        closeOnBackdrop={false}
       >
         <textarea
           value={sourceEditText}
@@ -267,6 +269,28 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
 
       {/* Input */}
       <div style={{ flexShrink: 0, marginTop: 8 }}>
+        {/* Response length selector */}
+        <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+          {([['short', '短め'], ['normal', '普通'], ['detailed', '詳細']] as [ResponseLength, string][]).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => setResponseLength(val)}
+              style={{
+                padding: '2px 10px',
+                fontSize: 11,
+                borderRadius: 4,
+                border: '1px solid',
+                borderColor: responseLength === val ? '#3b82f6' : '#d1d5db',
+                background: responseLength === val ? '#eff6ff' : '#f9fafb',
+                color: responseLength === val ? '#2563eb' : '#6b7280',
+                cursor: 'pointer',
+                fontWeight: responseLength === val ? 600 : 400,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <textarea
             value={input}

@@ -6,9 +6,10 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   maxWidth?: number;
+  closeOnBackdrop?: boolean;
 }
 
-export function Modal({ open, onClose, title, children, maxWidth = 480 }: ModalProps) {
+export function Modal({ open, onClose, title, children, maxWidth = 480, closeOnBackdrop = true }: ModalProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -24,7 +25,7 @@ export function Modal({ open, onClose, title, children, maxWidth = 480 }: ModalP
     <dialog
       ref={dialogRef}
       onClose={onClose}
-      onClick={e => { if (e.target === dialogRef.current) onClose(); }}
+      onClick={e => { if (closeOnBackdrop && e.target === dialogRef.current) onClose(); }}
       style={{
         border: 'none',
         borderRadius: 8,
