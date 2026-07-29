@@ -66,8 +66,9 @@ export async function sendChatMessage(
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-5',
       max_tokens: 2048,
+      thinking: { type: 'disabled' },
       system: buildSystemPrompt(ctx),
       messages,
       stream: true,
