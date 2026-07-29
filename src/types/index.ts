@@ -89,4 +89,5 @@ export type AppAction =
   | { type: 'SET_SEARCH_QUERY'; query: string }
   | { type: 'FOCUS_COLUMN'; columnId: string | null }
   | { type: 'UPDATE_PROJECT_MEMO'; projectId: string; memo: string }
-  | { type: 'UPDATE_ROW_MEMO'; rowId: string; memo: string };
+  | { type: 'UPDATE_ROW_MEMO'; rowId: string; memo: string }
+  | { type: 'UPDATE_ROW_NAME'; rowId: string; name: string };

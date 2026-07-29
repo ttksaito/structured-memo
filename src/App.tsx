@@ -44,9 +44,10 @@ export default function App() {
   }, [memoHeight]);
   const currentProject = state.projects.find(p => p.id === state.currentProjectId);
 
-  // 選択中セルの行を特定
+  // 選択中セルの行・列を特定
   const selectedCell = state.projectData?.cells.find(c => c.id === state.selectedCellId);
   const selectedRow = state.projectData?.rows.find(r => r.id === selectedCell?.rowId) ?? null;
+  const selectedColumn = state.projectData?.columns.find(c => c.id === selectedCell?.columnId) ?? null;
 
   const draggingLeft = useRef(false);
   const draggingRight = useRef(false);
@@ -276,28 +277,44 @@ export default function App() {
               </button>
             </div>
             {memoOpen && (
-              <textarea
-                value={memoText}
-                onChange={e => handleMemoChange(e.target.value)}
-                spellCheck={false}
-                placeholder={selectedRow ? `${selectedRow.name} のメモ...` : '行を選択するとメモを入力できます'}
-                disabled={!selectedRow}
-                style={{
-                  flex: 1,
-                  width: '100%',
-                  border: 'none',
-                  outline: 'none',
-                  resize: 'none',
-                  padding: '8px 12px',
-                  fontSize: 13,
-                  fontFamily: 'inherit',
-                  background: '#fafafa',
-                  color: '#1f2937',
-                  lineHeight: 1.6,
-                  boxSizing: 'border-box',
-                  minHeight: 0,
-                }}
-              />
+              <>
+                {selectedColumn && (
+                  <div style={{
+                    flexShrink: 0,
+                    padding: '8px 12px 0',
+                    fontSize: 13,
+                    color: '#1f2937',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}>
+                    <span style={{ fontWeight: 600, color: '#374151' }}>{selectedColumn.name}: </span>
+                    {selectedCell?.value || '（空欄）'}
+                  </div>
+                )}
+                <textarea
+                  value={memoText}
+                  onChange={e => handleMemoChange(e.target.value)}
+                  spellCheck={false}
+                  placeholder={selectedRow ? 'メモを入力...' : '行を選択するとメモを入力できます'}
+                  disabled={!selectedRow}
+                  style={{
+                    flex: 1,
+                    width: '100%',
+                    border: 'none',
+                    outline: 'none',
+                    resize: 'none',
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                    background: '#fafafa',
+                    color: '#1f2937',
+                    lineHeight: 1.6,
+                    boxSizing: 'border-box',
+                    minHeight: 0,
+                  }}
+                />
+              </>
             )}
           </div>
         </div>

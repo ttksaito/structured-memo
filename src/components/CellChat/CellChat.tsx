@@ -31,6 +31,7 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [sourceEditText, setSourceEditText] = useState('');
   const [responseLength, setResponseLength] = useState<ResponseLength>('normal');
+  const [rowNameEdit, setRowNameEdit] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -40,6 +41,13 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
   useEffect(() => {
     scrollToBottom();
   }, [state.selectedCellId, streamingText]);
+
+  const selectedCellForName = state.projectData?.cells.find(c => c.id === state.selectedCellId);
+  const selectedRowForName = state.projectData?.rows.find(r => r.id === selectedCellForName?.rowId);
+
+  useEffect(() => {
+    setRowNameEdit(selectedRowForName?.name ?? '');
+  }, [selectedRowForName?.id]);
 
   if (!state.projectData || !state.selectedCellId) {
     return (
@@ -63,6 +71,15 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
   const messages = thread?.messages || [];
   const interest = state.projectData.interests.find(i => i.cellId === cell.id);
   const rowCells = state.projectData.cells.filter(c => c.rowId === cell.rowId);
+
+  const commitRowName = () => {
+    const trimmed = rowNameEdit.trim();
+    if (trimmed && trimmed !== row.name) {
+      dispatch({ type: 'UPDATE_ROW_NAME', rowId: row.id, name: trimmed });
+    } else {
+      setRowNameEdit(row.name);
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -142,8 +159,28 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
       <div style={{ flexShrink: 0, borderBottom: '1px solid #e5e7eb', paddingBottom: 10, marginBottom: 8 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
           <ChatToggleButton onToggle={onToggle} />
-          <div>
-            <div style={{ fontSize: 11, color: '#9ca3af' }}>{row.name}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <input
+              value={rowNameEdit}
+              onChange={e => setRowNameEdit(e.target.value)}
+              onBlur={commitRowName}
+              onKeyDown={e => {
+                if (e.key === 'Enter') e.currentTarget.blur();
+                if (e.key === 'Escape') { setRowNameEdit(row.name); e.currentTarget.blur(); }
+              }}
+              title="クリックして行名を編集"
+              style={{
+                fontSize: 11,
+                color: '#9ca3af',
+                border: 'none',
+                borderBottom: '1px dashed #d1d5db',
+                background: 'transparent',
+                padding: 0,
+                width: '100%',
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
             <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2937' }}>{column.name}</div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../store/ProjectContext';
 import { calcAttentionScore, scoreToColor } from '../../utils/interest';
-import { Row } from '../../types';
+import { Row, Column } from '../../types';
 import { Modal } from '../common/Modal';
 
 export function DataTable() {
@@ -9,6 +9,8 @@ export function DataTable() {
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [showAddRow, setShowAddRow] = useState(false);
+  const [rowDetailRow, setRowDetailRow] = useState<Row | null>(null);
+  const [rowDetailNameColId, setRowDetailNameColId] = useState<string | null>(null);
   const [newRowValues, setNewRowValues] = useState<Record<string, string>>({});
   const [searchInput, setSearchInput] = useState(state.searchQuery);
   type SortKey = 'none' | 'chatCount' | 'lastChatted';
@@ -105,8 +107,13 @@ export function DataTable() {
   const getInterest = (cellId: string) =>
     state.projectData!.interests.find(i => i.cellId === cellId);
 
-  const handleCellClick = (cellId: string) => {
-    dispatch({ type: 'SELECT_CELL', cellId });
+  const handleCellClick = (row: Row, col: Column, cellId: string, isLeftmost: boolean) => {
+    if (isLeftmost) {
+      setRowDetailRow(row);
+      setRowDetailNameColId(col.id);
+    } else {
+      dispatch({ type: 'SELECT_CELL', cellId });
+    }
   };
 
   const handleCellDoubleClick = (cellId: string, value: string) => {
@@ -297,7 +304,7 @@ export function DataTable() {
           <tbody>
             {filteredRows.map(row => (
               <tr key={row.id}>
-                {columns.map(col => {
+                {columns.map((col, colIdx) => {
                   const cell = getCell(row.id, col.id);
                   const cellId = cell?.id || `${row.id}-${col.id}`;
                   const interest = getInterest(cellId);
@@ -308,7 +315,7 @@ export function DataTable() {
                   return (
                     <td
                       key={col.id}
-                      onClick={() => handleCellClick(cellId)}
+                      onClick={() => handleCellClick(row, col, cellId, colIdx === 0)}
                       onDoubleClick={() => handleCellDoubleClick(cellId, cell?.value || '')}
                       style={{
                         padding: '8px 10px',
@@ -422,16 +429,13 @@ export function DataTable() {
       </div>
 
       {/* 行追加モーダル */}
-      <Modal open={showAddRow} onClose={() => setShowAddRow(false)} title="行を追加" maxWidth={880}>
+      <Modal open={showAddRow} onClose={() => setShowAddRow(false)} title="行を追加" maxWidth={700}>
         <div
           style={{
             display: 'grid',
-            gridTemplateRows: 'repeat(2, auto)',
-            gridAutoFlow: 'column',
-            gridAutoColumns: 'minmax(220px, 1fr)',
+            gridTemplateColumns: 'repeat(2, 1fr)',
             gap: '14px 20px',
             maxHeight: '70vh',
-            overflowX: 'auto',
             overflowY: 'auto',
             paddingRight: 4,
             paddingBottom: 4,
@@ -450,24 +454,24 @@ export function DataTable() {
                     onChange={e => setNewRowValues(v => ({ ...v, [col.id]: e.target.value }))}
                     placeholder={col.name + 'を入力'}
                     autoFocus={idx === 0}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
+                    style={{ width: '100%', height: 54, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
                   />
                 ) : (
                   <textarea
                     value={newRowValues[col.id] || ''}
                     onChange={e => setNewRowValues(v => ({ ...v, [col.id]: e.target.value }))}
                     placeholder={col.name + 'を入力'}
-                    rows={3}
+                    rows={5}
                     style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }}
                   />
                 )}
               </div>
             );
           })}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', paddingTop: 4 }}>
+          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'center', paddingTop: 4 }}>
             <button
               onClick={() => setShowAddRow(false)}
-              style={{ padding: '8px 16px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
+              style={{ width: 120, padding: '8px 16px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
             >
               キャンセル
             </button>
@@ -475,6 +479,7 @@ export function DataTable() {
               onClick={handleAddRow}
               disabled={!(newRowValues['col-name'] || Object.values(newRowValues)[0] || '').trim()}
               style={{
+                width: 120,
                 padding: '8px 16px',
                 border: 'none',
                 borderRadius: 6,
@@ -488,6 +493,42 @@ export function DataTable() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* 行内容一覧モーダル（読み取り専用） */}
+      <Modal
+        open={!!rowDetailRow}
+        onClose={() => { setRowDetailRow(null); setRowDetailNameColId(null); }}
+        title={rowDetailRow?.name}
+        maxWidth={1000}
+      >
+        {rowDetailRow && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: 4 }}>
+            {allColumns.filter(col => col.id !== rowDetailNameColId).map(col => {
+              const cell = getCell(rowDetailRow.id, col.id);
+              return (
+                <div key={col.id}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>{col.name}</div>
+                  <div
+                    style={{
+                      fontSize: 13,
+                      color: '#1f2937',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      padding: '8px 10px',
+                      background: '#f9fafb',
+                      borderRadius: 6,
+                      border: '1px solid #e5e7eb',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {cell?.value || ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Modal>
     </div>
   );

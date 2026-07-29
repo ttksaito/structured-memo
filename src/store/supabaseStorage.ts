@@ -143,6 +143,10 @@ export async function dbUpdateRowMemo(rowId: string, memo: string): Promise<void
   await supabase.from('rows').update({ memo }).eq('id', rowId);
 }
 
+export async function dbUpdateRowName(rowId: string, name: string): Promise<void> {
+  await supabase.from('rows').update({ name }).eq('id', rowId);
+}
+
 export async function dbUpsertRow(row: Row, projectId: string, cells: Cell[]): Promise<void> {
   await supabase.from('rows').upsert({ id: row.id, project_id: projectId, name: row.name, sort_order: row.order, memo: row.memo ?? '' });
   if (cells.length > 0) {

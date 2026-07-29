@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from 'react';
 interface ModalProps {
   open: boolean;
   onClose: () => void;
-  title: string;
+  title?: string;
   children: React.ReactNode;
   maxWidth?: number;
   closeOnBackdrop?: boolean;
@@ -40,7 +40,7 @@ export function Modal({ open, onClose, title, children, maxWidth = 480, closeOnB
         margin: 0,
       }}
     >
-      <h3 style={{ margin: '0 0 16px', fontSize: 18 }}>{title}</h3>
+      {title && <h3 style={{ margin: '0 0 16px', fontSize: 18 }}>{title}</h3>}
       {children}
     </dialog>
   );
