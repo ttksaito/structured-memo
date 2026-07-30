@@ -139,6 +139,12 @@ export async function dbReorderColumns(columns: Column[]): Promise<void> {
   ));
 }
 
+export async function dbReorderRows(rows: Row[]): Promise<void> {
+  await Promise.all(rows.map(r =>
+    supabase.from('rows').update({ sort_order: r.order }).eq('id', r.id)
+  ));
+}
+
 export async function dbUpdateRowMemo(rowId: string, memo: string): Promise<void> {
   await supabase.from('rows').update({ memo }).eq('id', rowId);
 }

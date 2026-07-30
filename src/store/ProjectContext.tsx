@@ -4,7 +4,7 @@ import { createSampleData } from '../utils/sampleData';
 import {
   dbLoadProjects, dbSaveProject, dbDeleteProject,
   dbUpsertColumn, dbDeleteColumn, dbReorderColumns,
-  dbUpsertRow, dbDeleteRow,
+  dbUpsertRow, dbDeleteRow, dbReorderRows,
   dbUpsertCell, dbInsertMessage, dbUpsertInterest,
   dbSaveProjectData, dbUpdateProjectMemo, dbUpdateRowMemo, dbUpdateRowName,
 } from './supabaseStorage';
@@ -109,6 +109,10 @@ function reducer(state: AppState, action: AppAction): AppState {
         },
         selectedCellId: state.selectedCellId?.startsWith(action.rowId + '-') ? null : state.selectedCellId,
       };
+    }
+    case 'REORDER_ROWS': {
+      if (!state.projectData) return state;
+      return { ...state, projectData: { ...state.projectData, rows: action.rows } };
     }
     case 'UPDATE_CELL': {
       if (!state.projectData) return state;
@@ -271,6 +275,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         case 'DELETE_ROW':
           await dbDeleteRow(action.rowId);
+          break;
+        case 'REORDER_ROWS':
+          await dbReorderRows(action.rows);
           break;
         case 'UPDATE_CELL':
           await dbUpsertCell(action.cell);

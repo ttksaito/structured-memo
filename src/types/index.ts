@@ -81,6 +81,7 @@ export type AppAction =
   | { type: 'REORDER_COLUMNS'; columns: Column[] }
   | { type: 'ADD_ROW'; row: Row; cells?: Cell[] }
   | { type: 'DELETE_ROW'; rowId: string }
+  | { type: 'REORDER_ROWS'; rows: Row[] }
   | { type: 'UPDATE_CELL'; cell: Cell }
   | { type: 'SELECT_CELL'; cellId: string | null }
   | { type: 'ADD_MESSAGE'; cellId: string; message: ChatMessage }

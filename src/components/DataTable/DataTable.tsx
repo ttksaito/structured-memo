@@ -10,7 +10,7 @@ export function DataTable() {
   const [editValue, setEditValue] = useState('');
   const [showAddRow, setShowAddRow] = useState(false);
   const [rowDetailRow, setRowDetailRow] = useState<Row | null>(null);
-  const [rowDetailNameColId, setRowDetailNameColId] = useState<string | null>(null);
+  const [colDetailCol, setColDetailCol] = useState<Column | null>(null);
   const [newRowValues, setNewRowValues] = useState<Record<string, string>>({});
   const [searchInput, setSearchInput] = useState(state.searchQuery);
   type SortKey = 'none' | 'chatCount' | 'lastChatted';
@@ -39,6 +39,8 @@ export function DataTable() {
 
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
+  const dragRowId = useRef<string | null>(null);
+  const dragOverRowId = useRef<string | null>(null);
 
   // ドロップダウンを外側クリックで閉じる
   useEffect(() => {
@@ -107,13 +109,35 @@ export function DataTable() {
   const getInterest = (cellId: string) =>
     state.projectData!.interests.find(i => i.cellId === cellId);
 
-  const handleCellClick = (row: Row, col: Column, cellId: string, isLeftmost: boolean) => {
-    if (isLeftmost) {
-      setRowDetailRow(row);
-      setRowDetailNameColId(col.id);
-    } else {
-      dispatch({ type: 'SELECT_CELL', cellId });
-    }
+  const handleCellClick = (cellId: string) => {
+    dispatch({ type: 'SELECT_CELL', cellId });
+  };
+
+  const handleRowDragStart = (rowId: string) => {
+    dragRowId.current = rowId;
+  };
+
+  const handleRowDragEnter = (rowId: string) => {
+    dragOverRowId.current = rowId;
+  };
+
+  const handleRowDragEnd = () => {
+    const fromId = dragRowId.current;
+    const toId = dragOverRowId.current;
+    dragRowId.current = null;
+    dragOverRowId.current = null;
+    if (!fromId || !toId || fromId === toId) return;
+
+    const full = [...state.projectData!.rows].sort((a, b) => a.order - b.order);
+    const fromIdx = full.findIndex(r => r.id === fromId);
+    const toIdx = full.findIndex(r => r.id === toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const reordered = [...full];
+    const [removed] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, removed);
+    const updated = reordered.map((r, i) => ({ ...r, order: i }));
+    dispatch({ type: 'REORDER_ROWS', rows: updated });
   };
 
   const handleCellDoubleClick = (cellId: string, value: string) => {
@@ -272,10 +296,29 @@ export function DataTable() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr>
+              <th
+                title="ドラッグで行を並び替え / クリックで行の全項目を表示"
+                style={{
+                  padding: '8px 6px',
+                  background: '#f3f4f6',
+                  borderBottom: '2px solid #e5e7eb',
+                  textAlign: 'center',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#374151',
+                  position: 'sticky',
+                  top: 0,
+                  width: 44,
+                }}
+              >
+                No.
+              </th>
               {columns.map(col => (
                 <th
                   key={col.id}
                   ref={el => { colRefs.current[col.id] = el; }}
+                  onClick={() => setColDetailCol(col)}
+                  title="クリックで列の全行を一覧表示"
                   style={{
                     padding: '8px 10px',
                     background: state.focusedColumnId === col.id ? '#dbeafe' : '#f3f4f6',
@@ -288,6 +331,7 @@ export function DataTable() {
                     top: 0,
                     whiteSpace: 'nowrap',
                     minWidth: col.id === 'col-name' ? 160 : 200,
+                    cursor: 'pointer',
                   }}
                 >
                   {col.name}
@@ -302,9 +346,30 @@ export function DataTable() {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map(row => (
+            {filteredRows.map((row, rowIdx) => (
               <tr key={row.id}>
-                {columns.map((col, colIdx) => {
+                <td
+                  draggable
+                  onDragStart={() => handleRowDragStart(row.id)}
+                  onDragEnter={() => handleRowDragEnter(row.id)}
+                  onDragEnd={handleRowDragEnd}
+                  onDragOver={e => e.preventDefault()}
+                  onClick={() => setRowDetailRow(row)}
+                  title="ドラッグで行を並び替え / クリックで行の全項目を表示"
+                  style={{
+                    padding: '8px 6px',
+                    borderBottom: '1px solid #e5e7eb',
+                    background: '#f9fafb',
+                    textAlign: 'center',
+                    fontSize: 12,
+                    color: '#6b7280',
+                    cursor: 'grab',
+                    userSelect: 'none',
+                  }}
+                >
+                  {rowIdx + 1}
+                </td>
+                {columns.map(col => {
                   const cell = getCell(row.id, col.id);
                   const cellId = cell?.id || `${row.id}-${col.id}`;
                   const interest = getInterest(cellId);
@@ -315,7 +380,7 @@ export function DataTable() {
                   return (
                     <td
                       key={col.id}
-                      onClick={() => handleCellClick(row, col, cellId, colIdx === 0)}
+                      onClick={() => handleCellClick(cellId)}
                       onDoubleClick={() => handleCellDoubleClick(cellId, cell?.value || '')}
                       style={{
                         padding: '8px 10px',
@@ -498,13 +563,13 @@ export function DataTable() {
       {/* 行内容一覧モーダル（読み取り専用） */}
       <Modal
         open={!!rowDetailRow}
-        onClose={() => { setRowDetailRow(null); setRowDetailNameColId(null); }}
+        onClose={() => setRowDetailRow(null)}
         title={rowDetailRow?.name}
         maxWidth={1000}
       >
         {rowDetailRow && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px 20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: 4 }}>
-            {allColumns.filter(col => col.id !== rowDetailNameColId).map(col => {
+            {allColumns.map(col => {
               const cell = getCell(rowDetailRow.id, col.id);
               return (
                 <div key={col.id}>
@@ -525,6 +590,60 @@ export function DataTable() {
                     {cell?.value || ''}
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
+
+      {/* 列内容一覧モーダル（読み取り専用） */}
+      <Modal
+        open={!!colDetailCol}
+        onClose={() => setColDetailCol(null)}
+        title={colDetailCol?.name}
+        maxWidth={1000}
+      >
+        {colDetailCol && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px 20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: 4 }}>
+            {filteredRows.map((row, rowIdx) => {
+              const cell = getCell(row.id, colDetailCol.id);
+              const gridColumn = (rowIdx % 2) + 1;
+              const pairIdx = Math.floor(rowIdx / 2);
+              return (
+                <React.Fragment key={row.id}>
+                  <div
+                    style={{
+                      gridColumn,
+                      gridRow: pairIdx * 2 + 1,
+                      minWidth: 0,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: '#6b7280',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    No.{rowIdx + 1} {row.name}
+                  </div>
+                  <div
+                    style={{
+                      gridColumn,
+                      gridRow: pairIdx * 2 + 2,
+                      minWidth: 0,
+                      fontSize: 13,
+                      color: '#1f2937',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      padding: '8px 10px',
+                      background: '#f9fafb',
+                      borderRadius: 6,
+                      border: '1px solid #e5e7eb',
+                      lineHeight: 1.5,
+                      marginBottom: 6,
+                    }}
+                  >
+                    {cell?.value || ''}
+                  </div>
+                </React.Fragment>
               );
             })}
           </div>
