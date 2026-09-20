@@ -1,54 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../store/ProjectContext';
 import { calcAttentionScore, scoreToColor } from '../../utils/interest';
-import { Row, Column } from '../../types';
+import { Row, Column, Cell } from '../../types';
 import { Modal } from '../common/Modal';
+import { extractPaperInfo, PAPER_META_COLUMN, PAPER_SECTION_COLUMNS } from '../../services/paperExtract';
+import { uploadPaperPdf } from '../../services/paperStorage';
+import { SortKey, SortDir } from './TableToolbar';
 
-export function DataTable() {
+const isUrl = (v: string) => /^https?:\/\/\S+$/.test(v);
+
+interface DataTableProps {
+  sortKey: SortKey;
+  sortDir: SortDir;
+  sortColId: string;
+}
+
+export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
   const { state, dispatch } = useApp();
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [showAddRow, setShowAddRow] = useState(false);
   const [rowDetailRow, setRowDetailRow] = useState<Row | null>(null);
   const [colDetailCol, setColDetailCol] = useState<Column | null>(null);
-  const [newRowValues, setNewRowValues] = useState<Record<string, string>>({});
-  const [searchInput, setSearchInput] = useState(state.searchQuery);
-  type SortKey = 'none' | 'chatCount' | 'lastChatted';
-  type SortDir = 'desc' | 'asc';
-  const [sortKey, setSortKey] = useState<SortKey>('none');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [sortColId, setSortColId] = useState<string>('');
-  const [sortPickerFor, setSortPickerFor] = useState<SortKey | null>(null);
-
-  const handleSortButtonClick = (key: SortKey) => {
-    if (sortKey === key && sortColId) {
-      // 同じキーを再クリック → 方向トグル
-      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
-    } else {
-      // 列選択ピッカーを開く
-      setSortPickerFor(key);
-    }
-  };
-
-  const handlePickCol = (key: SortKey, colId: string) => {
-    setSortKey(key);
-    setSortColId(colId);
-    setSortDir('desc');
-    setSortPickerFor(null);
-  };
+  const [paperPhase, setPaperPhase] = useState<string | null>(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const dragRowId = useRef<string | null>(null);
   const dragOverRowId = useRef<string | null>(null);
-
-  // ドロップダウンを外側クリックで閉じる
-  useEffect(() => {
-    if (!sortPickerFor) return;
-    const handler = () => setSortPickerFor(null);
-    setTimeout(() => window.addEventListener('click', handler), 0);
-    return () => window.removeEventListener('click', handler);
-  }, [sortPickerFor]);
 
   // 列選択時にスクロール
   useEffect(() => {
@@ -156,144 +136,131 @@ export function DataTable() {
 
   const allColumns = [...state.projectData.columns].sort((a, b) => a.order - b.order);
 
-  const handleOpenAddRow = () => {
-    const init: Record<string, string> = {};
-    allColumns.forEach(c => { init[c.id] = ''; });
-    setNewRowValues(init);
-    setShowAddRow(true);
-  };
-
-  const handleAddRow = () => {
-    const nameCol = allColumns.find(c => c.id === 'col-name');
-    const rowName = nameCol ? (newRowValues['col-name'] || '').trim() : Object.values(newRowValues)[0]?.trim() || '';
-    if (!rowName) return;
-    const maxOrder = rows.length > 0 ? Math.max(...rows.map(r => r.order)) + 1 : 0;
-    const rowId = 'row-' + Date.now();
-    const row: Row = { id: rowId, name: rowName, order: maxOrder, memo: '' };
-    const cells = allColumns.map(col => ({
-      id: `${rowId}-${col.id}`,
-      rowId,
-      columnId: col.id,
-      value: newRowValues[col.id] || '',
-      annotation: '',
-    }));
-    dispatch({ type: 'ADD_ROW', row, cells });
-    setNewRowValues({});
-    setShowAddRow(false);
-  };
-
   const handleDeleteRow = (rowId: string, rowName: string) => {
     if (!confirm(`「${rowName}」を削除しますか？`)) return;
     dispatch({ type: 'DELETE_ROW', rowId });
   };
 
+  // ── 論文PDF取り込み ──────────────────────────────
+  const readFileAsBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve(result.slice(result.indexOf(',') + 1)); // data:...;base64, を除去
+      };
+      reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました'));
+      reader.readAsDataURL(file);
+    });
+
+  const handlePaperPdf = async (file: File) => {
+    if (file.size > 32 * 1024 * 1024) {
+      alert('PDFが32MBを超えています。Claude APIの上限(32MB・100ページ)以下のファイルを選択してください。');
+      return;
+    }
+    if (!state.apiKey) {
+      alert('Anthropic APIキーが設定されていません(.env.local の VITE_ANTHROPIC_API_KEY)。');
+      return;
+    }
+    const projectId = state.currentProjectId!;
+
+    try {
+      // 1. PDFをSupabase Storageへ保存
+      setPaperPhase(`「${file.name}」をアップロード中...`);
+      let pdfUrl = '';
+      let uploadError = '';
+      try {
+        pdfUrl = await uploadPaperPdf(file, projectId);
+      } catch (e) {
+        uploadError = e instanceof Error ? e.message : String(e);
+      }
+
+      // 2. 不足している列を自動作成(この列構成に応じて抽出プロンプトの数が決まる)
+      const paperColumnNames = [PAPER_META_COLUMN, ...PAPER_SECTION_COLUMNS, 'PDF'];
+      const allCols = [...state.projectData!.columns];
+      let nextOrder = allCols.length > 0 ? Math.max(...allCols.map(c => c.order)) + 1 : 0;
+      paperColumnNames.forEach((name, i) => {
+        if (!allCols.some(c => c.name === name)) {
+          const column: Column = { id: `col-${Date.now()}-${i}`, name, description: '', order: nextOrder++, visible: true };
+          allCols.push(column);
+          dispatch({ type: 'ADD_COLUMN', column });
+        }
+      });
+
+      // 3. 列ごとに1プロンプトずつ順番にClaudeへ投げて抽出
+      const nonSectionNames = new Set([PAPER_META_COLUMN, '著者', '日付', 'PDF']);
+      const sectionTargets = allCols
+        .filter(c => c.id !== 'col-name' && !nonSectionNames.has(c.name))
+        .sort((a, b) => a.order - b.order)
+        .map(c => ({ name: c.name, description: c.description }));
+      const base64 = await readFileAsBase64(file);
+      const info = await extractPaperInfo(state.apiKey, base64, sectionTargets, setPaperPhase);
+
+      // 4. 行を作成し、列名の一致で各セルに保存
+      setPaperPhase('結果を保存中...');
+      const valueForColumn = (col: Column): string => {
+        if (col.id === 'col-name') return info.title;
+        if (col.name === PAPER_META_COLUMN) return info.metaText;
+        if (col.name === '著者') return info.authors;
+        if (col.name === '日付') return info.date;
+        if (col.name === 'PDF') return pdfUrl;
+        return info.sections[col.name] ?? '';
+      };
+      const maxOrder = state.projectData!.rows.length > 0 ? Math.max(...state.projectData!.rows.map(r => r.order)) + 1 : 0;
+      const rowId = 'row-' + Date.now();
+      const row: Row = { id: rowId, name: info.title, order: maxOrder, memo: '' };
+      const cells: Cell[] = allCols.map(col => ({
+        id: `${rowId}-${col.id}`,
+        rowId,
+        columnId: col.id,
+        value: valueForColumn(col),
+        annotation: '',
+      }));
+      dispatch({ type: 'ADD_ROW', row, cells });
+
+      setPaperPhase(null);
+      if (uploadError) {
+        alert(`抽出結果は保存しましたが、PDF本体の保存に失敗しました。\n${uploadError}`);
+      }
+    } catch (e) {
+      setPaperPhase(null);
+      alert(`論文の取り込みに失敗しました。\n${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   return (
     <div style={{ padding: 12, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 120, position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <input
-            value={searchInput}
-            onChange={e => setSearchInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') dispatch({ type: 'SET_SEARCH_QUERY', query: searchInput }); }}
-            placeholder="検索..."
-            style={{ width: '100%', padding: '8px 30px 8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' }}
-          />
-          {searchInput && (
-            <button
-              onClick={() => { setSearchInput(''); dispatch({ type: 'SET_SEARCH_QUERY', query: '' }); }}
-              style={{ position: 'absolute', right: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 16, lineHeight: 1, padding: 2 }}
-            >×</button>
-          )}
+      {/* 論文PDF選択用の非表示input(右下の＋ボタンから開く) */}
+      <input
+        ref={pdfInputRef}
+        type="file"
+        accept="application/pdf,.pdf"
+        style={{ display: 'none' }}
+        onChange={e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) handlePaperPdf(file);
+        }}
+      />
+
+      {/* 論文取り込み中オーバーレイ */}
+      {paperPhase && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '28px 36px', maxWidth: 420, textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>📄</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2937', marginBottom: 6 }}>論文を取り込んでいます</div>
+            <div style={{ fontSize: 13, color: '#6b7280' }}>{paperPhase}</div>
+          </div>
         </div>
-        <button
-          onClick={() => dispatch({ type: 'SET_SEARCH_QUERY', query: searchInput })}
-          style={{ background: '#6b7280', color: '#fff', border: 'none', borderRadius: 6, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}
-        >
-          検索
-        </button>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center', position: 'relative' }}>
-          <span style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>ソート:</span>
-          {(['chatCount', 'lastChatted'] as const).map(key => {
-            const label = key === 'chatCount' ? '回数' : '最終日';
-            const active = sortKey === key && !!sortColId;
-            return (
-              <div key={key} style={{ position: 'relative' }}>
-                <button
-                  onClick={() => handleSortButtonClick(key)}
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: 12,
-                    border: `1px solid ${active ? '#3b82f6' : '#d1d5db'}`,
-                    borderRadius: 6,
-                    background: active ? '#eff6ff' : '#fff',
-                    color: active ? '#1d4ed8' : '#374151',
-                    cursor: 'pointer',
-                    fontWeight: active ? 600 : 400,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {label} {active ? (sortDir === 'desc' ? '↓' : '↑') : '▾'}
-                </button>
-                {/* 列選択ドロップダウン */}
-                {sortPickerFor === key && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    marginTop: 4,
-                    background: '#fff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 8,
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                    zIndex: 100,
-                    minWidth: 160,
-                    overflow: 'hidden',
-                  }}>
-                    <div style={{ padding: '6px 12px', fontSize: 11, color: '#9ca3af', borderBottom: '1px solid #f3f4f6' }}>列を選択</div>
-                    {allColumns.map(col => (
-                      <div
-                        key={col.id}
-                        onClick={() => handlePickCol(key, col.id)}
-                        style={{
-                          padding: '8px 12px',
-                          fontSize: 13,
-                          cursor: 'pointer',
-                          color: '#374151',
-                          background: sortColId === col.id && sortKey === key ? '#eff6ff' : '#fff',
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
-                        onMouseLeave={e => (e.currentTarget.style.background = sortColId === col.id && sortKey === key ? '#eff6ff' : '#fff')}
-                      >
-                        {col.name}
-                      </div>
-                    ))}
-                    <div
-                      onClick={() => setSortPickerFor(null)}
-                      style={{ padding: '6px 12px', fontSize: 12, color: '#9ca3af', borderTop: '1px solid #f3f4f6', cursor: 'pointer', textAlign: 'center' }}
-                    >
-                      閉じる
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {sortKey !== 'none' && sortColId && (
-            <button
-              onClick={() => { setSortKey('none'); setSortColId(''); setSortPickerFor(null); }}
-              style={{ padding: '6px 8px', fontSize: 12, border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', color: '#9ca3af', cursor: 'pointer' }}
-            >
-              解除
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Table */}
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
       <div ref={tableScrollRef} style={{ width: '100%', height: '100%', overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, fontSize: 13 }}>
           <thead>
             <tr>
               <th
@@ -308,6 +275,8 @@ export function DataTable() {
                   color: '#374151',
                   position: 'sticky',
                   top: 0,
+                  left: 0,
+                  zIndex: 3,
                   width: 44,
                 }}
               >
@@ -329,6 +298,7 @@ export function DataTable() {
                     color: state.focusedColumnId === col.id ? '#1d4ed8' : '#374151',
                     position: 'sticky',
                     top: 0,
+                    zIndex: 2,
                     whiteSpace: 'nowrap',
                     minWidth: col.id === 'col-name' ? 160 : 200,
                     cursor: 'pointer',
@@ -342,7 +312,7 @@ export function DataTable() {
                   )}
                 </th>
               ))}
-              <th style={{ padding: '8px 10px', background: '#f3f4f6', borderBottom: '2px solid #e5e7eb', position: 'sticky', top: 0, width: 40 }} />
+              <th style={{ padding: '8px 10px', background: '#f3f4f6', borderBottom: '2px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 2, width: 40 }} />
             </tr>
           </thead>
           <tbody>
@@ -365,6 +335,9 @@ export function DataTable() {
                     color: '#6b7280',
                     cursor: 'grab',
                     userSelect: 'none',
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 1,
                   }}
                 >
                   {rowIdx + 1}
@@ -425,7 +398,16 @@ export function DataTable() {
                             whiteSpace: 'pre-wrap',
                             wordBreak: 'break-word',
                           }}>
-                            {cell?.value || ''}
+                            {cell?.value && isUrl(cell.value) ? (
+                              <button
+                                onClick={e => { e.stopPropagation(); setPdfPreviewUrl(cell.value); }}
+                                style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}
+                              >
+                                📄 PDFを開く
+                              </button>
+                            ) : (
+                              cell?.value || ''
+                            )}
                           </div>
                           {(interest?.chatCount ?? 0) > 0 && (
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: '#6b7280', fontWeight: 500 }}>
@@ -465,10 +447,11 @@ export function DataTable() {
           </div>
         )}
       </div>
-      {/* フローティング行追加ボタン */}
+      {/* フローティング論文PDF追加ボタン */}
       <button
-        onClick={handleOpenAddRow}
-        title="行を追加"
+        onClick={() => pdfInputRef.current?.click()}
+        disabled={!!paperPhase}
+        title="論文PDFをアップロードすると、AIが著者・日付・タイトル・概要などを抽出して行を自動作成します"
         style={{
           position: 'absolute',
           bottom: 20,
@@ -476,12 +459,12 @@ export function DataTable() {
           width: 48,
           height: 48,
           borderRadius: '50%',
-          background: '#10b981',
+          background: paperPhase ? '#9ca3af' : '#10b981',
           color: '#fff',
           border: 'none',
           fontSize: 28,
           lineHeight: 1,
-          cursor: 'pointer',
+          cursor: paperPhase ? 'default' : 'pointer',
           boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
           display: 'flex',
           alignItems: 'center',
@@ -492,73 +475,6 @@ export function DataTable() {
         ＋
       </button>
       </div>
-
-      {/* 行追加モーダル */}
-      <Modal open={showAddRow} onClose={() => setShowAddRow(false)} title="行を追加" maxWidth={700}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: '14px 20px',
-            maxHeight: '70vh',
-            overflowY: 'auto',
-            paddingRight: 4,
-            paddingBottom: 4,
-          }}
-        >
-          {allColumns.map((col, idx) => {
-            const isName = col.id === 'col-name';
-            return (
-              <div key={col.id}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 4 }}>
-                  {col.name}{isName && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
-                </label>
-                {isName ? (
-                  <input
-                    value={newRowValues[col.id] || ''}
-                    onChange={e => setNewRowValues(v => ({ ...v, [col.id]: e.target.value }))}
-                    placeholder={col.name + 'を入力'}
-                    autoFocus={idx === 0}
-                    style={{ width: '100%', height: 54, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14, boxSizing: 'border-box' }}
-                  />
-                ) : (
-                  <textarea
-                    value={newRowValues[col.id] || ''}
-                    onChange={e => setNewRowValues(v => ({ ...v, [col.id]: e.target.value }))}
-                    placeholder={col.name + 'を入力'}
-                    rows={5}
-                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }}
-                  />
-                )}
-              </div>
-            );
-          })}
-          <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 8, justifyContent: 'center', paddingTop: 4 }}>
-            <button
-              onClick={() => setShowAddRow(false)}
-              style={{ width: 120, padding: '8px 16px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer' }}
-            >
-              キャンセル
-            </button>
-            <button
-              onClick={handleAddRow}
-              disabled={!(newRowValues['col-name'] || Object.values(newRowValues)[0] || '').trim()}
-              style={{
-                width: 120,
-                padding: '8px 16px',
-                border: 'none',
-                borderRadius: 6,
-                background: (newRowValues['col-name'] || Object.values(newRowValues)[0] || '').trim() ? '#10b981' : '#9ca3af',
-                color: '#fff',
-                cursor: (newRowValues['col-name'] || Object.values(newRowValues)[0] || '').trim() ? 'pointer' : 'default',
-                fontWeight: 600,
-              }}
-            >
-              追加
-            </button>
-          </div>
-        </div>
-      </Modal>
 
       {/* 行内容一覧モーダル（読み取り専用） */}
       <Modal
@@ -587,7 +503,16 @@ export function DataTable() {
                       lineHeight: 1.5,
                     }}
                   >
-                    {cell?.value || ''}
+                    {cell?.value && isUrl(cell.value) ? (
+                      <button
+                        onClick={() => setPdfPreviewUrl(cell.value)}
+                        style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}
+                      >
+                        📄 PDFを開く
+                      </button>
+                    ) : (
+                      cell?.value || ''
+                    )}
                   </div>
                 </div>
               );
@@ -641,12 +566,32 @@ export function DataTable() {
                       marginBottom: 6,
                     }}
                   >
-                    {cell?.value || ''}
+                    {cell?.value && isUrl(cell.value) ? (
+                      <button
+                        onClick={() => setPdfPreviewUrl(cell.value)}
+                        style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}
+                      >
+                        📄 PDFを開く
+                      </button>
+                    ) : (
+                      cell?.value || ''
+                    )}
                   </div>
                 </React.Fragment>
               );
             })}
           </div>
+        )}
+      </Modal>
+
+      {/* PDFプレビューモーダル */}
+      <Modal open={!!pdfPreviewUrl} onClose={() => setPdfPreviewUrl(null)} title="PDFプレビュー" fill>
+        {pdfPreviewUrl && (
+          <iframe
+            src={`${pdfPreviewUrl}#toolbar=0&navpanes=0`}
+            title="PDFプレビュー"
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block', background: '#f9fafb' }}
+          />
         )}
       </Modal>
     </div>

@@ -3,17 +3,37 @@ import { useApp } from './store/ProjectContext';
 import { ProjectList } from './components/Home/ProjectList';
 import { ColumnNav } from './components/ColumnNav/ColumnNav';
 import { DataTable } from './components/DataTable/DataTable';
+import { TableToolbar, SortKey, SortDir } from './components/DataTable/TableToolbar';
 import { CellChat } from './components/CellChat/CellChat';
+
+// パネルの開閉・サイズをlocalStorageに保存し、次回起動時に復元する
+function usePersistentState<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw !== null ? (JSON.parse(raw) as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+  return [value, setValue] as const;
+}
 
 export default function App() {
   const { state, dispatch } = useApp();
 
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
-  const [leftWidth, setLeftWidth] = useState(220);
-  const [rightWidth, setRightWidth] = useState(340);
-  const [memoOpen, setMemoOpen] = useState(true);
-  const [memoHeight, setMemoHeight] = useState(160);
+  const [leftOpen, setLeftOpen] = usePersistentState('structured-memo-ui-left-open', true);
+  const [rightOpen, setRightOpen] = usePersistentState('structured-memo-ui-right-open', true);
+  const [leftWidth, setLeftWidth] = usePersistentState('structured-memo-ui-left-width', 220);
+  const [rightWidth, setRightWidth] = usePersistentState('structured-memo-ui-right-width', 340);
+  const [memoOpen, setMemoOpen] = usePersistentState('structured-memo-ui-memo-open', true);
+  const [memoHeight, setMemoHeight] = usePersistentState('structured-memo-ui-memo-height', 160);
+  const [sortKey, setSortKey] = useState<SortKey>('none');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortColId, setSortColId] = useState('');
   const [memoText, setMemoText] = useState('');
   const memoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draggingMemo = useRef(false);
@@ -47,7 +67,6 @@ export default function App() {
   // 選択中セルの行・列を特定
   const selectedCell = state.projectData?.cells.find(c => c.id === state.selectedCellId);
   const selectedRow = state.projectData?.rows.find(r => r.id === selectedCell?.rowId) ?? null;
-  const selectedColumn = state.projectData?.columns.find(c => c.id === selectedCell?.columnId) ?? null;
 
   const draggingLeft = useRef(false);
   const draggingRight = useRef(false);
@@ -160,6 +179,12 @@ export default function App() {
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: '#1f2937', flex: 1 }}>
           {project?.name || 'プロジェクト'}
         </h2>
+        <TableToolbar
+          sortKey={sortKey}
+          sortDir={sortDir}
+          sortColId={sortColId}
+          onSortChange={(key, colId, dir) => { setSortKey(key); setSortColId(colId); setSortDir(dir); }}
+        />
       </div>
 
       {/* 3-column layout */}
@@ -215,7 +240,7 @@ export default function App() {
         {/* Center: Table + Memo */}
         <div style={{ flex: 1, overflow: 'hidden', background: '#fff', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <div style={{ flex: 4, overflow: 'hidden', minHeight: 0 }}>
-            <DataTable />
+            <DataTable sortKey={sortKey} sortDir={sortDir} sortColId={sortColId} />
           </div>
           {/* Memo panel */}
           <div style={{
@@ -277,22 +302,7 @@ export default function App() {
               </button>
             </div>
             {memoOpen && (
-              <>
-                {selectedColumn && (
-                  <div style={{
-                    flexShrink: 0,
-                    padding: '8px 12px 0',
-                    fontSize: 13,
-                    color: '#1f2937',
-                    lineHeight: 1.6,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                  }}>
-                    <span style={{ fontWeight: 600, color: '#374151' }}>{selectedColumn.name}: </span>
-                    {selectedCell?.value || '（空欄）'}
-                  </div>
-                )}
-                <textarea
+              <textarea
                   value={memoText}
                   onChange={e => handleMemoChange(e.target.value)}
                   spellCheck={false}
@@ -314,7 +324,6 @@ export default function App() {
                     minHeight: 0,
                   }}
                 />
-              </>
             )}
           </div>
         </div>

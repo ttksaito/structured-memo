@@ -72,6 +72,14 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
   const interest = state.projectData.interests.find(i => i.cellId === cell.id);
   const rowCells = state.projectData.cells.filter(c => c.rowId === cell.rowId);
 
+  // この行の論文PDFのURL(「PDF」列を優先、無ければURL形式のセルを探す)
+  const isUrl = (v: string) => /^https?:\/\/\S+$/.test((v || '').trim());
+  const pdfColumn = state.projectData.columns.find(c => c.name === 'PDF');
+  const pdfCell =
+    (pdfColumn && rowCells.find(c => c.columnId === pdfColumn.id && isUrl(c.value))) ||
+    rowCells.find(c => isUrl(c.value));
+  const pdfUrl = pdfCell ? pdfCell.value.trim() : '';
+
   const commitRowName = () => {
     const trimmed = rowNameEdit.trim();
     if (trimmed && trimmed !== row.name) {
@@ -213,10 +221,19 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
       <Modal
         open={sourceModalOpen}
         onClose={() => setSourceModalOpen(false)}
-        title={`ソース — ${column.name}`}
+        title={pdfUrl ? `ソース — ${row.name}` : `ソース — ${column.name}`}
         maxWidth={800}
-        closeOnBackdrop={false}
+        closeOnBackdrop={!!pdfUrl}
+        fill={!!pdfUrl}
       >
+        {pdfUrl ? (
+          <iframe
+            src={`${pdfUrl}#toolbar=0&navpanes=0`}
+            title="論文PDF"
+            style={{ width: '100%', height: '100%', border: 'none', display: 'block', background: '#f9fafb' }}
+          />
+        ) : (
+          <>
         <textarea
           value={sourceEditText}
           onChange={e => setSourceEditText(e.target.value)}
@@ -266,6 +283,8 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
             保存
           </button>
         </div>
+          </>
+        )}
       </Modal>
 
       {/* Messages */}
