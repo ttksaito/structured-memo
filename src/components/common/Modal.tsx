@@ -117,7 +117,7 @@ export function Modal({ open, onClose, title, children, maxWidth = 480, closeOnB
         </div>
       ) : (
         <>
-          {title && <h3 style={{ margin: '0 0 16px', fontSize: 18 }}>{title}</h3>}
+          {title && <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600, color: '#374151', lineHeight: 1.5 }}>{title}</h3>}
           {children}
         </>
       )}

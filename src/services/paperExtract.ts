@@ -66,9 +66,13 @@ async function callClaude(apiKey: string, body: object): Promise<{ content?: Arr
   return response.json();
 }
 
+// 上限超過時は文の区切り(。)で切り詰め、途中で切れた文が残らないようにする
 function truncate(text: string, max = 300): string {
   const t = (text || '').trim();
-  return t.length > max ? t.slice(0, max) : t;
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const lastEnd = cut.lastIndexOf('。');
+  return lastEnd >= max * 0.5 ? cut.slice(0, lastEnd + 1) : cut;
 }
 
 // プロンプト1: 著者/日付/タイトル
@@ -118,7 +122,7 @@ async function extractSection(apiKey: string, pdfBase64: string, target: PaperSe
           pdfBlock(pdfBase64),
           {
             type: 'text',
-            text: `この論文の「${target.name}」を日本語300字以内で整理してください。\n${hint}論文の内容に忠実に、前置きや見出しなしで本文だけを出力してください。`,
+            text: `この論文の「${target.name}」を日本語300字以内で整理してください。\n${hint}論文の内容に忠実に、前置きや見出しなしで本文だけを出力してください。300字を超えないよう要点を絞り、最後の文は必ず完結させてください。`,
           },
         ],
       },
