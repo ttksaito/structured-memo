@@ -18,6 +18,7 @@ export interface Row {
   name: string;
   order: number;
   memo: string;
+  pdfUrl?: string; // 論文PDFのURL(列とは独立に行へ保存)
 }
 
 export interface Cell {

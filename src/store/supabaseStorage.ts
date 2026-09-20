@@ -54,7 +54,7 @@ export async function dbLoadProjectData(projectId: string): Promise<ProjectData 
     id: c.id, name: c.name, description: c.description, order: c.sort_order, visible: c.visible,
   }));
   const rows: Row[] = (rowRes.data || []).map(r => ({
-    id: r.id, name: r.name, order: r.sort_order, memo: r.memo ?? '',
+    id: r.id, name: r.name, order: r.sort_order, memo: r.memo ?? '', pdfUrl: r.pdf_url ?? undefined,
   }));
 
   const rowIds = rows.map(r => r.id);
@@ -98,8 +98,8 @@ export async function dbSaveProjectData(projectId: string, data: ProjectData): P
     );
   }
   if (data.rows.length > 0) {
-    await supabase.from('rows').upsert(
-      data.rows.map(r => ({ id: r.id, project_id: projectId, name: r.name, sort_order: r.order, memo: r.memo ?? '' }))
+    await upsertRowRecords(
+      data.rows.map(r => rowRecord(r, projectId))
     );
   }
   if (data.cells.length > 0) {
@@ -117,6 +117,18 @@ export async function dbSaveProjectData(projectId: string, data: ProjectData): P
     await supabase.from('cell_interests').upsert(
       data.interests.map(i => ({ cell_id: i.cellId, chat_count: i.chatCount, last_chatted_at: i.lastChattedAt, star: i.star }))
     );
+  }
+}
+
+function rowRecord(row: Row, projectId: string): Record<string, unknown> {
+  return { id: row.id, project_id: projectId, name: row.name, sort_order: row.order, memo: row.memo ?? '', pdf_url: row.pdfUrl ?? null };
+}
+
+// rowsテーブルにpdf_url列が無い環境でも他項目の同期が止まらないよう、失敗時はpdf_urlを外して再試行する
+async function upsertRowRecords(records: Array<Record<string, unknown>>): Promise<void> {
+  const { error } = await supabase.from('rows').upsert(records);
+  if (error && error.message.includes('pdf_url')) {
+    await supabase.from('rows').upsert(records.map(({ pdf_url: _omit, ...rest }) => rest));
   }
 }
 
@@ -154,7 +166,7 @@ export async function dbUpdateRowName(rowId: string, name: string): Promise<void
 }
 
 export async function dbUpsertRow(row: Row, projectId: string, cells: Cell[]): Promise<void> {
-  await supabase.from('rows').upsert({ id: row.id, project_id: projectId, name: row.name, sort_order: row.order, memo: row.memo ?? '' });
+  await upsertRowRecords([rowRecord(row, projectId)]);
   if (cells.length > 0) {
     await supabase.from('cells').upsert(
       cells.map(c => ({ id: c.id, row_id: c.rowId, column_id: c.columnId, value: c.value, annotation: c.annotation }))

@@ -176,7 +176,8 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
       }
 
       // 2. 不足している列を自動作成(この列構成に応じて抽出プロンプトの数が決まる)
-      const paperColumnNames = [PAPER_META_COLUMN, ...PAPER_SECTION_COLUMNS, 'PDF'];
+      // PDFのURLは行(row.pdfUrl)に保存するため、PDF列は自動作成しない(既存のPDF列があれば埋める)
+      const paperColumnNames = [PAPER_META_COLUMN, ...PAPER_SECTION_COLUMNS];
       const allCols = [...state.projectData!.columns];
       let nextOrder = allCols.length > 0 ? Math.max(...allCols.map(c => c.order)) + 1 : 0;
       paperColumnNames.forEach((name, i) => {
@@ -208,7 +209,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
       };
       const maxOrder = state.projectData!.rows.length > 0 ? Math.max(...state.projectData!.rows.map(r => r.order)) + 1 : 0;
       const rowId = 'row-' + Date.now();
-      const row: Row = { id: rowId, name: info.title, order: maxOrder, memo: '' };
+      const row: Row = { id: rowId, name: info.title, order: maxOrder, memo: '', pdfUrl };
       const cells: Cell[] = allCols.map(col => ({
         id: `${rowId}-${col.id}`,
         rowId,

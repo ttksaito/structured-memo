@@ -1,5 +1,5 @@
 // 論文PDFをClaude APIに渡し、列ごとに個別プロンプトを順番に投げて抽出する
-// プロンプト1: 著者/日付/タイトル、プロンプト2以降: 各列を500字以内で整理
+// プロンプト1: 著者/日付/タイトル、プロンプト2以降: 各列を300字以内で整理
 // (列が増えると抽出プロンプトも1つ増える)
 
 export interface PaperSectionTarget {
@@ -66,7 +66,7 @@ async function callClaude(apiKey: string, body: object): Promise<{ content?: Arr
   return response.json();
 }
 
-function truncate(text: string, max = 500): string {
+function truncate(text: string, max = 300): string {
   const t = (text || '').trim();
   return t.length > max ? t.slice(0, max) : t;
 }
@@ -118,7 +118,7 @@ async function extractSection(apiKey: string, pdfBase64: string, target: PaperSe
           pdfBlock(pdfBase64),
           {
             type: 'text',
-            text: `この論文の「${target.name}」を日本語500字以内で整理してください。\n${hint}論文の内容に忠実に、前置きや見出しなしで本文だけを出力してください。`,
+            text: `この論文の「${target.name}」を日本語300字以内で整理してください。\n${hint}論文の内容に忠実に、前置きや見出しなしで本文だけを出力してください。`,
           },
         ],
       },

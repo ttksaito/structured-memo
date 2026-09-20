@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../store/ProjectContext';
 import { sendChatMessage, ResponseLength } from '../../services/anthropic';
 import { ChatMessageItem } from './ChatMessage';
-import { Modal } from '../common/Modal';
 import { CellInterest } from '../../types';
 
 function ChatToggleButton({ onToggle }: { onToggle?: () => void }) {
@@ -28,8 +27,6 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [error, setError] = useState('');
-  const [sourceModalOpen, setSourceModalOpen] = useState(false);
-  const [sourceEditText, setSourceEditText] = useState('');
   const [responseLength, setResponseLength] = useState<ResponseLength>('normal');
   const [rowNameEdit, setRowNameEdit] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -72,13 +69,13 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
   const interest = state.projectData.interests.find(i => i.cellId === cell.id);
   const rowCells = state.projectData.cells.filter(c => c.rowId === cell.rowId);
 
-  // この行の論文PDFのURL(「PDF」列を優先、無ければURL形式のセルを探す)
+  // この行の論文PDFのURL(行に保存されたURLを優先、無ければ旧データ用に「PDF」列→URL形式のセルを探す)
   const isUrl = (v: string) => /^https?:\/\/\S+$/.test((v || '').trim());
   const pdfColumn = state.projectData.columns.find(c => c.name === 'PDF');
   const pdfCell =
     (pdfColumn && rowCells.find(c => c.columnId === pdfColumn.id && isUrl(c.value))) ||
     rowCells.find(c => isUrl(c.value));
-  const pdfUrl = pdfCell ? pdfCell.value.trim() : '';
+  const pdfUrl = (row.pdfUrl || '').trim() || (pdfCell ? pdfCell.value.trim() : '');
 
   const commitRowName = () => {
     const trimmed = rowNameEdit.trim();
@@ -194,98 +191,30 @@ export function CellChat({ onToggle }: { onToggle?: () => void }) {
         </div>
         {/* Meta info + Source button */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6, fontSize: 11, color: '#9ca3af' }}>
-          <button
-            onClick={() => { setSourceEditText(cell.value); setSourceModalOpen(true); }}
-            style={{
-              padding: '2px 8px',
-              fontSize: 11,
-              background: '#f3f4f6',
-              border: '1px solid #d1d5db',
-              borderRadius: 4,
-              cursor: 'pointer',
-              color: '#374151',
-              fontWeight: 500,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            ソース
-          </button>
+          {pdfUrl && (
+            <button
+              onClick={() => window.open(pdfUrl, '_blank', 'noopener,noreferrer')}
+              style={{
+                padding: '2px 8px',
+                fontSize: 11,
+                background: '#f3f4f6',
+                border: '1px solid #d1d5db',
+                borderRadius: 4,
+                cursor: 'pointer',
+                color: '#374151',
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              📄 PDF
+            </button>
+          )}
           <span>会話: {interest?.chatCount || 0}回</span>
           {interest?.lastChattedAt && (
             <span>最終: {new Date(interest.lastChattedAt).toLocaleDateString('ja-JP')}</span>
           )}
         </div>
       </div>
-
-      {/* Source modal */}
-      <Modal
-        open={sourceModalOpen}
-        onClose={() => setSourceModalOpen(false)}
-        title={pdfUrl ? `ソース — ${row.name}` : `ソース — ${column.name}`}
-        maxWidth={800}
-        closeOnBackdrop={!!pdfUrl}
-        fill={!!pdfUrl}
-      >
-        {pdfUrl ? (
-          <iframe
-            src={`${pdfUrl}#toolbar=0&navpanes=0`}
-            title="論文PDF"
-            style={{ width: '100%', height: '100%', border: 'none', display: 'block', background: '#f9fafb' }}
-          />
-        ) : (
-          <>
-        <textarea
-          value={sourceEditText}
-          onChange={e => setSourceEditText(e.target.value)}
-          rows={20}
-          style={{
-            width: '100%',
-            padding: '8px 10px',
-            border: '1px solid #d1d5db',
-            borderRadius: 6,
-            fontSize: 13,
-            lineHeight: 1.6,
-            resize: 'vertical',
-            fontFamily: 'inherit',
-            boxSizing: 'border-box',
-          }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
-          <button
-            onClick={() => setSourceModalOpen(false)}
-            style={{
-              padding: '6px 16px',
-              background: '#f3f4f6',
-              border: '1px solid #d1d5db',
-              borderRadius: 6,
-              cursor: 'pointer',
-              fontSize: 13,
-            }}
-          >
-            キャンセル
-          </button>
-          <button
-            onClick={() => {
-              dispatch({ type: 'UPDATE_CELL', cell: { ...cell, value: sourceEditText } });
-              setSourceModalOpen(false);
-            }}
-            style={{
-              padding: '6px 16px',
-              background: '#3b82f6',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: 600,
-            }}
-          >
-            保存
-          </button>
-        </div>
-          </>
-        )}
-      </Modal>
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
