@@ -25,6 +25,44 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
 
+  // 列幅(ドラッグで調整、プロジェクトごとにlocalStorageへ保存)
+  const colWidthsKey = `structured-memo-ui-col-widths-${state.currentProjectId}`;
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(colWidthsKey) || '{}');
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(colWidthsKey, JSON.stringify(colWidths));
+  }, [colWidthsKey, colWidths]);
+  const colWidth = (col: Column) => colWidths[col.id] ?? (col.id === 'col-name' ? 160 : 200);
+  const resizingCol = useRef<{ id: string; startX: number; startW: number } | null>(null);
+
+  const handleColResizeStart = (e: React.MouseEvent, colId: string, startW: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingCol.current = { id: colId, startX: e.clientX, startW };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: MouseEvent) => {
+      const r = resizingCol.current;
+      if (!r) return;
+      const w = Math.max(80, Math.min(800, r.startW + ev.clientX - r.startX));
+      setColWidths(prev => ({ ...prev, [r.id]: w }));
+    };
+    const onUp = () => {
+      resizingCol.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   const tableScrollRef = useRef<HTMLDivElement>(null);
   const colRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const dragRowId = useRef<string | null>(null);
@@ -270,6 +308,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                   padding: '8px 6px',
                   background: '#f3f4f6',
                   borderBottom: '2px solid #e5e7eb',
+                  borderRight: '1px solid #e5e7eb',
                   textAlign: 'center',
                   fontSize: 12,
                   fontWeight: 600,
@@ -293,6 +332,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                     padding: '8px 10px',
                     background: state.focusedColumnId === col.id ? '#dbeafe' : '#f3f4f6',
                     borderBottom: '2px solid #e5e7eb',
+                    borderRight: '1px solid #e5e7eb',
                     textAlign: 'left',
                     fontSize: 12,
                     fontWeight: 600,
@@ -301,7 +341,11 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                     top: 0,
                     zIndex: 2,
                     whiteSpace: 'nowrap',
-                    minWidth: col.id === 'col-name' ? 160 : 200,
+                    width: colWidth(col),
+                    minWidth: colWidth(col),
+                    maxWidth: colWidth(col),
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                     cursor: 'pointer',
                   }}
                 >
@@ -311,6 +355,13 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                       {sortKey === 'chatCount' ? '回数' : '最終日'}{sortDir === 'desc' ? '↓' : '↑'}
                     </span>
                   )}
+                  {/* 列幅リサイズハンドル */}
+                  <span
+                    onMouseDown={e => handleColResizeStart(e, col.id, colWidth(col))}
+                    onClick={e => e.stopPropagation()}
+                    title="ドラッグで列幅を変更"
+                    style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 6, cursor: 'col-resize' }}
+                  />
                 </th>
               ))}
               <th style={{ padding: '8px 10px', background: '#f3f4f6', borderBottom: '2px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 2, width: 40 }} />
@@ -361,7 +412,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                         borderBottom: '1px solid #e5e7eb',
                         background: isSelected ? '#dbeafe' : '#fff',
                         cursor: 'pointer',
-                        maxWidth: 300,
+                        maxWidth: colWidth(col),
                         verticalAlign: 'top',
                         outline: isSelected ? '2px solid #3b82f6' : 'none',
                         outlineOffset: -2,
