@@ -88,6 +88,8 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
     .filter(c => c.visible)
     .sort((a, b) => a.order - b.order);
   const rows = [...state.projectData.rows].sort((a, b) => a.order - b.order);
+  // 行番号は全体での並び順に基づく固定番号(検索・ソートで変わらない)
+  const rowNumberById = new Map(rows.map((r, i) => [r.id, i + 1]));
 
   const filteredRows = (() => {
     const base = state.searchQuery
@@ -400,7 +402,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                     zIndex: 1,
                   }}
                 >
-                  {rowIdx + 1}
+                  {rowNumberById.get(row.id)}
                 </td>
                 {columns.map(col => {
                   const cell = getCell(row.id, col.id);
@@ -630,7 +632,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                       wordBreak: 'break-word',
                     }}
                   >
-                    No.{rowIdx + 1} {row.name}
+                    No.{rowNumberById.get(row.id)} {row.name}
                   </div>
                   <div
                     style={{
