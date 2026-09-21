@@ -179,6 +179,14 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
     dispatch({ type: 'DELETE_ROW', rowId });
   };
 
+  // 行の論文PDFのURL(行に保存されたURLを優先、旧データ用にURL形式のセルへフォールバック)
+  const rowPdfUrl = (row: Row): string => {
+    const fromRow = (row.pdfUrl || '').trim();
+    if (fromRow) return fromRow;
+    const c = state.projectData!.cells.find(c => c.rowId === row.id && isUrl(c.value));
+    return c ? c.value.trim() : '';
+  };
+
   // ── 論文PDF取り込み ──────────────────────────────
   const readFileAsBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -532,7 +540,30 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
       <Modal
         open={!!rowDetailRow}
         onClose={() => setRowDetailRow(null)}
-        title={rowDetailRow?.name}
+        title={rowDetailRow && (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+            <span style={{ flex: 1, minWidth: 0 }}>{rowDetailRow.name}</span>
+            {rowPdfUrl(rowDetailRow) && (
+              <button
+                onClick={() => window.open(rowPdfUrl(rowDetailRow), '_blank', 'noopener,noreferrer')}
+                style={{
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  background: '#f3f4f6',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  color: '#374151',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                📄 PDF
+              </button>
+            )}
+          </div>
+        )}
         maxWidth={1000}
       >
         {rowDetailRow && (
@@ -544,7 +575,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                   <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>{col.name}</div>
                   <div
                     style={{
-                      fontSize: 13,
+                      fontSize: 14,
                       color: '#1f2937',
                       whiteSpace: 'pre-wrap',
                       wordBreak: 'break-word',
@@ -552,13 +583,13 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                       background: '#f9fafb',
                       borderRadius: 6,
                       border: '1px solid #e5e7eb',
-                      lineHeight: 1.5,
+                      lineHeight: 1.6,
                     }}
                   >
                     {cell?.value && isUrl(cell.value) ? (
                       <button
                         onClick={() => setPdfPreviewUrl(cell.value)}
-                        style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}
+                        style={{ background: 'none', border: 'none', padding: 0, color: '#2563eb', fontWeight: 600, fontSize: 14, fontFamily: 'inherit', cursor: 'pointer' }}
                       >
                         📄 PDFを開く
                       </button>
