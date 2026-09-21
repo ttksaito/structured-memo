@@ -67,6 +67,9 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
   const colRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const dragRowId = useRef<string | null>(null);
   const dragOverRowId = useRef<string | null>(null);
+  // 行ドラッグ中の表示用状態(ドラッグ元の半透明化と挿入位置のライン表示)
+  const [draggingRowId, setDraggingRowId] = useState<string | null>(null);
+  const [dragOverRow, setDragOverRow] = useState<string | null>(null);
 
   // 列選択時にスクロール
   useEffect(() => {
@@ -135,10 +138,12 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
 
   const handleRowDragStart = (rowId: string) => {
     dragRowId.current = rowId;
+    setDraggingRowId(rowId);
   };
 
   const handleRowDragEnter = (rowId: string) => {
     dragOverRowId.current = rowId;
+    setDragOverRow(rowId);
   };
 
   const handleRowDragEnd = () => {
@@ -146,6 +151,8 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
     const toId = dragOverRowId.current;
     dragRowId.current = null;
     dragOverRowId.current = null;
+    setDraggingRowId(null);
+    setDragOverRow(null);
     if (!fromId || !toId || fromId === toId) return;
 
     const full = [...state.projectData!.rows].sort((a, b) => a.order - b.order);
@@ -378,20 +385,36 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((row, rowIdx) => (
-              <tr key={row.id}>
+            {filteredRows.map(row => {
+              // ドラッグ中: 挿入位置を示すライン(上から来たら下辺、下から来たら上辺)
+              const draggingRow = draggingRowId ? state.projectData!.rows.find(r => r.id === draggingRowId) : null;
+              const isDragSource = draggingRowId === row.id;
+              const dropPos = dragOverRow === row.id && draggingRow && !isDragSource
+                ? (draggingRow.order < row.order ? 'below' : 'above')
+                : null;
+              const dropShadow = dropPos === 'above'
+                ? 'inset 0 3px 0 #3b82f6'
+                : dropPos === 'below'
+                  ? 'inset 0 -3px 0 #3b82f6'
+                  : undefined;
+
+              return (
+              <tr
+                key={row.id}
+                onDragEnter={() => draggingRowId && handleRowDragEnter(row.id)}
+                onDragOver={e => e.preventDefault()}
+                style={{ opacity: isDragSource ? 0.45 : 1 }}
+              >
                 <td
                   draggable
                   onDragStart={() => handleRowDragStart(row.id)}
-                  onDragEnter={() => handleRowDragEnter(row.id)}
                   onDragEnd={handleRowDragEnd}
-                  onDragOver={e => e.preventDefault()}
                   onClick={() => setRowDetailRow(row)}
                   title="ドラッグで行を並び替え / クリックで行の全項目を表示"
                   style={{
                     padding: '8px 6px',
                     borderBottom: '1px solid #e5e7eb',
-                    background: '#f9fafb',
+                    background: dropPos ? '#dbeafe' : '#f9fafb',
                     textAlign: 'center',
                     fontSize: 12,
                     color: '#6b7280',
@@ -400,6 +423,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                     position: 'sticky',
                     left: 0,
                     zIndex: 1,
+                    boxShadow: dropShadow,
                   }}
                 >
                   {rowNumberById.get(row.id)}
@@ -423,6 +447,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                         background: isSelected ? '#dbeafe' : '#fff',
                         cursor: 'pointer',
                         maxWidth: colWidth(col),
+                        boxShadow: dropShadow,
                         verticalAlign: 'top',
                         outline: isSelected ? '2px solid #3b82f6' : 'none',
                         outlineOffset: -2,
@@ -490,7 +515,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                     </td>
                   );
                 })}
-                <td style={{ padding: '8px 4px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                <td style={{ padding: '8px 4px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', boxShadow: dropShadow }}>
                   <button
                     onClick={() => handleDeleteRow(row.id, row.name)}
                     title="行を削除"
@@ -500,7 +525,8 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         {filteredRows.length === 0 && (
