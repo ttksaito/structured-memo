@@ -5,6 +5,7 @@ import { Row, Column, Cell } from '../../types';
 import { Modal } from '../common/Modal';
 import { extractPaperInfo, PAPER_META_COLUMN, PAPER_SECTION_COLUMNS } from '../../services/paperExtract';
 import { uploadPaperPdf } from '../../services/paperStorage';
+import { appendCostLog } from '../../services/costLog';
 import { SortKey, SortDir } from './TableToolbar';
 
 const isUrl = (v: string) => /^https?:\/\/\S+$/.test(v);
@@ -251,6 +252,8 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
         .map(c => ({ name: c.name, description: c.description }));
       const base64 = await readFileAsBase64(file);
       const info = await extractPaperInfo(state.apiKey, base64, sectionTargets, setPaperPhase);
+      appendCostLog({ date: new Date().toISOString(), projectId, title: info.title, ...info.usage })
+        .catch(e => console.error('コスト記録の保存に失敗(取り込み自体は成功):', e));
 
       // 4. 行を作成し、列名の一致で各セルに保存
       setPaperPhase('結果を保存中...');

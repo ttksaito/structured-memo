@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../../store/ProjectContext';
 import { Column } from '../../types';
 import { Modal } from '../common/Modal';
+import { loadCostLog, CostLogEntry } from '../../services/costLog';
 
 export function ColumnNav({ onToggle }: { onToggle?: () => void }) {
   const { state, dispatch } = useApp();
@@ -9,6 +10,20 @@ export function ColumnNav({ onToggle }: { onToggle?: () => void }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [newColDesc, setNewColDesc] = useState('');
+  const [showCosts, setShowCosts] = useState(false);
+  const [openDays, setOpenDays] = useState<Set<string>>(new Set());
+  const [costEntries, setCostEntries] = useState<CostLogEntry[] | null>(null);
+  const [costError, setCostError] = useState('');
+
+  const handleOpenCosts = () => {
+    setOpenDays(new Set());
+    setCostEntries(null);
+    setCostError('');
+    setShowCosts(true);
+    loadCostLog()
+      .then(setCostEntries)
+      .catch(e => { setCostEntries([]); setCostError(e instanceof Error ? e.message : String(e)); });
+  };
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
@@ -154,6 +169,127 @@ export function ColumnNav({ onToggle }: { onToggle?: () => void }) {
       >
         + 追加
       </button>
+
+      <button
+        onClick={handleOpenCosts}
+        title="論文取り込みにかかったAPIコストを日別に表示"
+        style={{
+          flexShrink: 0,
+          marginTop: 6,
+          width: '100%',
+          background: '#fff',
+          color: '#374151',
+          border: '1px solid #d1d5db',
+          borderRadius: 4,
+          padding: '6px 10px',
+          fontSize: 12,
+          cursor: 'pointer',
+          fontWeight: 600,
+        }}
+      >
+        💰 コスト
+      </button>
+
+      {/* APIコストモーダル(日別 → PDF別) */}
+      <Modal open={showCosts} onClose={() => setShowCosts(false)} title="APIコスト（論文取り込み）" maxWidth={640}>
+        {(() => {
+          if (!showCosts) return null;
+          if (costEntries === null) {
+            return <div style={{ fontSize: 13, color: '#9ca3af', padding: '12px 0' }}>読み込み中...</div>;
+          }
+          if (costError) {
+            return <div style={{ fontSize: 13, color: '#ef4444', padding: '12px 0', lineHeight: 1.6 }}>{costError}</div>;
+          }
+          const entries = costEntries;
+          const dayOf = (iso: string) => {
+            const d = new Date(iso);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          };
+          const byDay = new Map<string, CostLogEntry[]>();
+          for (const e of entries) {
+            const day = dayOf(e.date);
+            if (!byDay.has(day)) byDay.set(day, []);
+            byDay.get(day)!.push(e);
+          }
+          const days = [...byDay.keys()].sort().reverse();
+          const totalUsd = entries.reduce((s, e) => s + e.costUsd, 0);
+          const toggleDay = (day: string) => {
+            setOpenDays(prev => {
+              const next = new Set(prev);
+              if (next.has(day)) next.delete(day);
+              else next.add(day);
+              return next;
+            });
+          };
+          const fmt = (v: number) => `$${v.toFixed(2)}`;
+
+          if (entries.length === 0) {
+            return <div style={{ fontSize: 13, color: '#9ca3af', padding: '12px 0' }}>まだ記録がありません。論文PDFを取り込むと、かかったコストがここに記録されます。</div>;
+          }
+          return (
+            <div style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 10 }}>
+                合計: {fmt(totalUsd)}（{entries.length}件）
+              </div>
+              {days.map(day => {
+                const list = byDay.get(day)!;
+                const daySum = list.reduce((s, e) => s + e.costUsd, 0);
+                const open = openDays.has(day);
+                return (
+                  <div key={day} style={{ marginBottom: 6 }}>
+                    <div
+                      onClick={() => toggleDay(day)}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '8px 10px',
+                        background: '#f3f4f6',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: '#374151',
+                      }}
+                    >
+                      <span>{open ? '▾' : '▸'} {day}（{list.length}件）</span>
+                      <span>{fmt(daySum)}</span>
+                    </div>
+                    {open && list.map(e => {
+                      const d = new Date(e.date);
+                      const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                      const tokens = `入力${e.inputTokens.toLocaleString()} / 出力${e.outputTokens.toLocaleString()} / キャッシュ書込${e.cacheWriteTokens.toLocaleString()} / 読取${e.cacheReadTokens.toLocaleString()}トークン`;
+                      return (
+                        <div
+                          key={e.id}
+                          title={tokens}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: 12,
+                            padding: '6px 10px 6px 24px',
+                            fontSize: 12,
+                            color: '#4b5563',
+                            borderBottom: '1px solid #f3f4f6',
+                          }}
+                        >
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {time} {e.title}
+                          </span>
+                          <span style={{ flexShrink: 0, fontWeight: 600 }}>{fmt(e.costUsd)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 10 }}>
+                ※ 実測トークン数にClaude Sonnet 5の単価を掛けた金額です。全環境（ローカル/本番）の取り込みが共通で記録されます。
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
 
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="列を追加">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

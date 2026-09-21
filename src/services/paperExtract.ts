@@ -7,12 +7,20 @@ export interface PaperSectionTarget {
   description?: string; // 列の説明(あればプロンプトのヒントに使う)
 }
 
+export interface PaperUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheWriteTokens: number;
+  cacheReadTokens: number;
+}
+
 export interface PaperInfo {
   title: string; // 行名用タイトル(日本語訳があれば「日本語訳（原題）」)
   metaText: string; // 「著者/日付/タイトル」列用の整形テキスト
   authors: string;
   date: string;
   sections: Record<string, string>; // 列名(概要/背景/...) → 内容
+  usage: PaperUsage; // 取り込み全体で消費したトークン数
 }
 
 // 「著者/日付/タイトル」をまとめて入れる列名
@@ -48,7 +56,22 @@ function pdfBlock(pdfBase64: string) {
   };
 }
 
-async function callClaude(apiKey: string, body: object): Promise<{ content?: Array<{ type: string; text?: string; input?: unknown }> }> {
+interface ApiUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
+function addUsage(acc: PaperUsage, u?: ApiUsage): void {
+  if (!u) return;
+  acc.inputTokens += u.input_tokens ?? 0;
+  acc.outputTokens += u.output_tokens ?? 0;
+  acc.cacheWriteTokens += u.cache_creation_input_tokens ?? 0;
+  acc.cacheReadTokens += u.cache_read_input_tokens ?? 0;
+}
+
+async function callClaude(apiKey: string, body: object): Promise<{ content?: Array<{ type: string; text?: string; input?: unknown }>; usage?: ApiUsage }> {
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -76,7 +99,7 @@ function truncate(text: string, max = 300): string {
 }
 
 // プロンプト1: 著者/日付/タイトル
-async function extractMeta(apiKey: string, pdfBase64: string): Promise<Omit<PaperInfo, 'sections'>> {
+async function extractMeta(apiKey: string, pdfBase64: string, acc: PaperUsage): Promise<Omit<PaperInfo, 'sections' | 'usage'>> {
   const data = await callClaude(apiKey, {
     model: MODEL,
     max_tokens: 1024,
@@ -94,6 +117,7 @@ async function extractMeta(apiKey: string, pdfBase64: string): Promise<Omit<Pape
     ],
   });
 
+  addUsage(acc, data.usage);
   const toolUse = (data.content || []).find(b => b.type === 'tool_use');
   if (!toolUse) throw new Error('著者/日付/タイトルの抽出に失敗しました');
   const input = toolUse.input as Record<string, string>;
@@ -109,7 +133,7 @@ async function extractMeta(apiKey: string, pdfBase64: string): Promise<Omit<Pape
 }
 
 // プロンプト2以降: 1列につき1プロンプト
-async function extractSection(apiKey: string, pdfBase64: string, target: PaperSectionTarget): Promise<string> {
+async function extractSection(apiKey: string, pdfBase64: string, target: PaperSectionTarget, acc: PaperUsage): Promise<string> {
   const hint = target.description?.trim() ? `(この項目の意味: ${target.description.trim()})\n` : '';
   const data = await callClaude(apiKey, {
     model: MODEL,
@@ -129,6 +153,7 @@ async function extractSection(apiKey: string, pdfBase64: string, target: PaperSe
     ],
   });
 
+  addUsage(acc, data.usage);
   const text = (data.content || [])
     .filter(b => b.type === 'text')
     .map(b => b.text || '')
@@ -144,16 +169,17 @@ export async function extractPaperInfo(
   onProgress?: (message: string) => void
 ): Promise<PaperInfo> {
   const total = sectionTargets.length + 1;
+  const usage: PaperUsage = { inputTokens: 0, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 };
 
   onProgress?.(`Claudeが論文を読解中... (1/${total}) 著者/日付/タイトル`);
-  const meta = await extractMeta(apiKey, pdfBase64);
+  const meta = await extractMeta(apiKey, pdfBase64, usage);
 
   const sections: Record<string, string> = {};
   for (let i = 0; i < sectionTargets.length; i++) {
     const target = sectionTargets[i];
     onProgress?.(`Claudeが論文を読解中... (${i + 2}/${total}) ${target.name}`);
-    sections[target.name] = await extractSection(apiKey, pdfBase64, target);
+    sections[target.name] = await extractSection(apiKey, pdfBase64, target, usage);
   }
 
-  return { ...meta, sections };
+  return { ...meta, sections, usage };
 }
