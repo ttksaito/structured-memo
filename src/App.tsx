@@ -4,7 +4,32 @@ import { ProjectList } from './components/Home/ProjectList';
 import { ColumnNav } from './components/ColumnNav/ColumnNav';
 import { DataTable } from './components/DataTable/DataTable';
 import { TableToolbar, SortKey, SortDir } from './components/DataTable/TableToolbar';
-import { CellChat } from './components/CellChat/CellChat';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+
+// ソース上で直前のブロックとの間に空白行があるブロックにだけ余白用クラスを付ける
+// (HTML構造上は空白行の有無が消えるため、パース時の行番号で判定する)
+function remarkBlankLineSpacing() {
+  type BlockNode = {
+    position?: { start: { line: number }; end: { line: number } };
+    data?: { hProperties?: { className?: string } };
+  };
+  return (tree: { children: BlockNode[] }) => {
+    for (let i = 1; i < tree.children.length; i++) {
+      const prev = tree.children[i - 1];
+      const cur = tree.children[i];
+      if (prev.position && cur.position && cur.position.start.line - prev.position.end.line >= 2) {
+        const data = (cur.data ??= {});
+        const hProps = (data.hProperties ??= {});
+        hProps.className = 'md-spaced';
+      }
+    }
+  };
+}
 
 // パネルの開閉・サイズをlocalStorageに保存し、次回起動時に復元する
 function usePersistentState<T>(key: string, initial: T) {
@@ -29,39 +54,12 @@ export default function App() {
   const [rightOpen, setRightOpen] = usePersistentState('structured-memo-ui-right-open', true);
   const [leftWidth, setLeftWidth] = usePersistentState('structured-memo-ui-left-width', 220);
   const [rightWidth, setRightWidth] = usePersistentState('structured-memo-ui-right-width', 340);
-  const [memoOpen, setMemoOpen] = usePersistentState('structured-memo-ui-memo-open', true);
-  const [memoHeight, setMemoHeight] = usePersistentState('structured-memo-ui-memo-height', 160);
   const [sortKey, setSortKey] = useState<SortKey>('none');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [sortColId, setSortColId] = useState('');
   const [memoText, setMemoText] = useState('');
+  const [memoPreview, setMemoPreview] = usePersistentState('structured-memo-ui-memo-preview', false);
   const memoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const draggingMemo = useRef(false);
-  const dragStartY = useRef(0);
-  const dragStartHeight = useRef(0);
-
-  const onMemoDragStart = useCallback((e: React.MouseEvent) => {
-    draggingMemo.current = true;
-    dragStartY.current = e.clientY;
-    dragStartHeight.current = memoHeight;
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-
-    const onMove = (ev: MouseEvent) => {
-      if (!draggingMemo.current) return;
-      const delta = dragStartY.current - ev.clientY;
-      setMemoHeight(Math.max(80, Math.min(500, dragStartHeight.current + delta)));
-    };
-    const onUp = () => {
-      draggingMemo.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  }, [memoHeight]);
   const currentProject = state.projects.find(p => p.id === state.currentProjectId);
 
   // 選択中セルの行・列を特定
@@ -237,72 +235,122 @@ export default function App() {
           </div>
         )}
 
-        {/* Center: Table + Memo */}
-        <div style={{ flex: 1, overflow: 'hidden', background: '#fff', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ flex: 4, overflow: 'hidden', minHeight: 0 }}>
-            <DataTable sortKey={sortKey} sortDir={sortDir} sortColId={sortColId} />
-          </div>
-          {/* Memo panel */}
-          <div style={{
-            flexShrink: 0,
-            borderTop: '2px solid #e5e7eb',
-            display: 'flex',
-            flexDirection: 'column',
-            background: '#fafafa',
-            height: memoOpen ? memoHeight : 'auto',
-          }}>
-            {/* Resize handle */}
-            {memoOpen && (
-              <div
-                onMouseDown={onMemoDragStart}
-                title="ドラッグでサイズ変更"
-                style={{
-                  height: 5,
-                  cursor: 'row-resize',
-                  background: 'transparent',
-                  flexShrink: 0,
-                  position: 'relative',
-                  zIndex: 10,
-                }}
-              />
-            )}
-            <div style={{
-              padding: '4px 8px 4px 12px',
-              fontSize: 11,
-              fontWeight: 600,
-              color: '#6b7280',
-              background: '#f3f4f6',
-              borderBottom: memoOpen ? '1px solid #e5e7eb' : 'none',
-              flexShrink: 0,
-              display: 'flex',
-              gap: 8,
-              alignItems: 'center',
-            }}>
-              <span>メモ</span>
-              {selectedRow && (
-                <span style={{ color: '#374151', fontWeight: 500 }}>{selectedRow.name}</span>
-              )}
-              <button
-                onClick={() => setMemoOpen(o => !o)}
-                title={memoOpen ? 'メモを閉じる' : 'メモを開く'}
-                style={{
-                  marginLeft: 'auto',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: '#9ca3af',
-                  padding: '2px 4px',
-                  fontSize: 12,
-                  lineHeight: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                {memoOpen ? '▼' : '▲'}
-              </button>
-            </div>
-            {memoOpen && (
-              <textarea
+        {/* Center: Table */}
+        <div style={{ flex: 1, overflow: 'hidden', background: '#fff', minWidth: 0 }}>
+          <DataTable sortKey={sortKey} sortDir={sortDir} sortColId={sortColId} />
+        </div>
+
+        {/* Right: Memo */}
+        {rightOpen ? (
+          <>
+            <div
+              style={{ ...resizeHandleStyle, borderLeft: '1px solid #e5e7eb' }}
+              onMouseDown={onRightDragStart}
+              title="ドラッグでサイズ変更"
+            />
+            <div
+              style={{
+                width: rightWidth,
+                minWidth: 240,
+                borderLeft: '1px solid #e5e7eb',
+                background: '#fafafa',
+                overflow: 'hidden',
+                flexShrink: 0,
+                display: 'flex',
+                flexDirection: 'column',
+              }}
+            >
+              <div style={{
+                padding: '4px 8px 4px 12px',
+                fontSize: 11,
+                fontWeight: 600,
+                color: '#6b7280',
+                background: '#f3f4f6',
+                borderBottom: '1px solid #e5e7eb',
+                flexShrink: 0,
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+              }}>
+                <span>メモ</span>
+                {selectedRow && (
+                  <span style={{ color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedRow.name}</span>
+                )}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, flexShrink: 0 }}>
+                  {(['edit', 'preview'] as const).map(mode => {
+                    const active = memoPreview === (mode === 'preview');
+                    return (
+                      <button
+                        key={mode}
+                        onClick={() => setMemoPreview(mode === 'preview')}
+                        style={{
+                          background: active ? '#e5e7eb' : 'none',
+                          border: 'none',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          color: active ? '#374151' : '#9ca3af',
+                          padding: '2px 8px',
+                          fontSize: 11,
+                          fontWeight: active ? 600 : 400,
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {mode === 'edit' ? '編集' : 'プレビュー'}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => setRightOpen(false)}
+                  title="メモを閉じる"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#9ca3af',
+                    padding: '2px 4px',
+                    fontSize: 12,
+                    lineHeight: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  ▶
+                </button>
+              </div>
+              {memoPreview ? (
+                <div
+                  className="markdown-body"
+                  style={{
+                    flex: 1,
+                    overflow: 'auto',
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    background: '#fafafa',
+                    color: '#1f2937',
+                    lineHeight: 1.6,
+                    minHeight: 0,
+                  }}
+                >
+                  {memoText.trim() ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkBreaks, remarkMath, remarkBlankLineSpacing]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        // 改行1回(<br>)の行送りを折り返しより4px広げる
+                        br: () => <span style={{ display: 'block', height: 4 }} />,
+                      }}
+                    >
+                      {memoText}
+                    </ReactMarkdown>
+                  ) : (
+                    <span style={{ color: '#9ca3af' }}>
+                      {selectedRow ? 'メモがありません' : '行を選択するとメモを表示できます'}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <textarea
                   value={memoText}
                   onChange={e => handleMemoChange(e.target.value)}
                   spellCheck={false}
@@ -319,34 +367,12 @@ export default function App() {
                     fontFamily: 'inherit',
                     background: '#fafafa',
                     color: '#1f2937',
-                    lineHeight: 1.6,
+                    lineHeight: 1.9,
                     boxSizing: 'border-box',
                     minHeight: 0,
                   }}
                 />
-            )}
-          </div>
-        </div>
-
-        {/* Right: Cell Chat */}
-        {rightOpen ? (
-          <>
-            <div
-              style={{ ...resizeHandleStyle, borderLeft: '1px solid #e5e7eb' }}
-              onMouseDown={onRightDragStart}
-              title="ドラッグでサイズ変更"
-            />
-            <div
-              style={{
-                width: rightWidth,
-                minWidth: 240,
-                borderLeft: '1px solid #e5e7eb',
-                background: '#fafafa',
-                overflow: 'hidden',
-                flexShrink: 0,
-              }}
-            >
-              <CellChat onToggle={() => setRightOpen(false)} />
+              )}
             </div>
           </>
         ) : (
@@ -364,7 +390,7 @@ export default function App() {
           >
             <button
               onClick={() => setRightOpen(true)}
-              title="チャットを表示"
+              title="メモを表示"
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: '#9ca3af', display: 'flex' }}
             >
               <svg width="16" height="16" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">

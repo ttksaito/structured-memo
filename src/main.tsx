@@ -22,8 +22,9 @@ style.textContent = `
   .markdown-body h1 { font-size: 1.2em; font-weight: 700; margin: 8px 0 4px; }
   .markdown-body h2 { font-size: 1.1em; font-weight: 700; margin: 8px 0 4px; }
   .markdown-body h3 { font-size: 1em; font-weight: 700; margin: 6px 0 3px; }
-  .markdown-body p { margin: 4px 0; }
-  .markdown-body ul, .markdown-body ol { padding-left: 1.4em; margin: 4px 0; }
+  .markdown-body p { margin: 0; }
+  .markdown-body .md-spaced { margin-top: 21px; }
+  .markdown-body ul, .markdown-body ol { padding-left: 1.4em; margin: 0; }
   .markdown-body li { margin: 2px 0; }
   .markdown-body strong { font-weight: 700; }
   .markdown-body em { font-style: italic; }
