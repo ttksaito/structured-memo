@@ -6,7 +6,7 @@ import {
   dbUpsertColumn, dbDeleteColumn, dbReorderColumns,
   dbUpsertRow, dbDeleteRow, dbReorderRows,
   dbUpsertCell, dbInsertMessage, dbUpsertInterest,
-  dbSaveProjectData, dbUpdateProjectMemo, dbUpdateRowMemo, dbUpdateRowName,
+  dbSaveProjectData, dbUpdateProjectMemo, dbUpdateRowMemo,
 } from './supabaseStorage';
 
 const HARDCODED_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY as string;
@@ -177,18 +177,6 @@ function reducer(state: AppState, action: AppAction): AppState {
         },
       };
     }
-    case 'UPDATE_ROW_NAME': {
-      if (!state.projectData) return state;
-      return {
-        ...state,
-        projectData: {
-          ...state.projectData,
-          rows: state.projectData.rows.map(r =>
-            r.id === action.rowId ? { ...r, name: action.name } : r
-          ),
-        },
-      };
-    }
     default:
       return state;
   }
@@ -293,9 +281,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           break;
         case 'UPDATE_ROW_MEMO':
           await dbUpdateRowMemo(action.rowId, action.memo);
-          break;
-        case 'UPDATE_ROW_NAME':
-          await dbUpdateRowName(action.rowId, action.name);
           break;
       }
     })().catch(err => console.error('Supabase sync error:', err));

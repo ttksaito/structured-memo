@@ -18,8 +18,6 @@ interface DataTableProps {
 
 export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
   const { state, dispatch } = useApp();
-  const [editingCellId, setEditingCellId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
   const [rowDetailRow, setRowDetailRow] = useState<Row | null>(null);
   const [colDetailCol, setColDetailCol] = useState<Column | null>(null);
   const [paperPhase, setPaperPhase] = useState<string | null>(null);
@@ -98,7 +96,6 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
   const filteredRows = (() => {
     const base = state.searchQuery
       ? rows.filter(row => {
-          if (row.name.toLowerCase().includes(state.searchQuery.toLowerCase())) return true;
           return state.projectData!.cells
             .filter(c => c.rowId === row.id)
             .some(c => c.value.toLowerCase().includes(state.searchQuery.toLowerCase()));
@@ -166,20 +163,6 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
     reordered.splice(toIdx, 0, removed);
     const updated = reordered.map((r, i) => ({ ...r, order: i }));
     dispatch({ type: 'REORDER_ROWS', rows: updated });
-  };
-
-  const handleCellDoubleClick = (cellId: string, value: string) => {
-    setEditingCellId(cellId);
-    setEditValue(value);
-  };
-
-  const handleCellSave = () => {
-    if (!editingCellId) return;
-    const cell = state.projectData!.cells.find(c => c.id === editingCellId);
-    if (cell) {
-      dispatch({ type: 'UPDATE_CELL', cell: { ...cell, value: editValue } });
-    }
-    setEditingCellId(null);
   };
 
   const allColumns = [...state.projectData.columns].sort((a, b) => a.order - b.order);
@@ -437,13 +420,11 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                   const interest = getInterest(cellId);
                   const score = calcAttentionScore(interest);
                   const isSelected = state.selectedCellId === cellId;
-                  const isEditing = editingCellId === cellId;
 
                   return (
                     <td
                       key={col.id}
                       onClick={() => handleCellClick(cellId)}
-                      onDoubleClick={() => handleCellDoubleClick(cellId, cell?.value || '')}
                       style={{
                         padding: '8px 10px',
                         borderBottom: '1px solid #e5e7eb',
@@ -457,26 +438,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                         position: 'relative',
                       }}
                     >
-                      {isEditing ? (
-                        <textarea
-                          value={editValue}
-                          onChange={e => setEditValue(e.target.value)}
-                          onBlur={handleCellSave}
-                          onKeyDown={e => { if (e.key === 'Escape') setEditingCellId(null); if (e.key === 'Enter' && e.ctrlKey) handleCellSave(); }}
-                          autoFocus
-                          style={{
-                            width: '100%',
-                            minHeight: 60,
-                            border: '1px solid #3b82f6',
-                            borderRadius: 4,
-                            padding: 4,
-                            fontSize: 13,
-                            resize: 'vertical',
-                            fontFamily: 'inherit',
-                          }}
-                        />
-                      ) : (
-                        <>
+                      <>
                           <div style={{
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
@@ -511,7 +473,6 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                             </div>
                           )}
                         </>
-                      )}
                       {interest?.star && (
                         <span style={{ position: 'absolute', top: 2, right: 4, fontSize: 10 }}>&#9733;</span>
                       )}
@@ -520,7 +481,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                 })}
                 <td style={{ padding: '8px 4px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', boxShadow: dropShadow }}>
                   <button
-                    onClick={() => handleDeleteRow(row.id, row.name)}
+                    onClick={() => handleDeleteRow(row.id, getCell(row.id, 'col-name')?.value || `No.${rowNumberById.get(row.id)}`)}
                     title="行を削除"
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 14, padding: 2 }}
                   >
@@ -573,7 +534,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
         onClose={() => setRowDetailRow(null)}
         title={rowDetailRow && (
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
-            <span style={{ flex: 1, minWidth: 0 }}>{rowDetailRow.name}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>No.{rowNumberById.get(rowDetailRow.id)}</span>
             {rowPdfUrl(rowDetailRow) && (
               <button
                 onClick={() => window.open(rowPdfUrl(rowDetailRow), '_blank', 'noopener,noreferrer')}
@@ -661,7 +622,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                       wordBreak: 'break-word',
                     }}
                   >
-                    No.{rowNumberById.get(row.id)} {row.name}
+                    No.{rowNumberById.get(row.id)}
                   </div>
                   <div
                     style={{

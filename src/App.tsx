@@ -11,6 +11,8 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
+const isUrl = (v: string) => /^https?:\/\/\S+$/.test(v);
+
 // ソース上で直前のブロックとの間に空白行があるブロックにだけ余白用クラスを付ける
 // (HTML構造上は空白行の有無が消えるため、パース時の行番号で判定する)
 function remarkBlankLineSpacing() {
@@ -59,12 +61,89 @@ export default function App() {
   const [sortColId, setSortColId] = useState('');
   const [memoText, setMemoText] = useState('');
   const [memoPreview, setMemoPreview] = usePersistentState('structured-memo-ui-memo-preview', false);
+  const [cellPanelOpen, setCellPanelOpen] = usePersistentState('structured-memo-ui-cell-open', true);
+  const [cellPanelHeight, setCellPanelHeight] = usePersistentState('structured-memo-ui-cell-height', 160);
   const memoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentProject = state.projects.find(p => p.id === state.currentProjectId);
 
-  // 選択中セルの行・列を特定
-  const selectedCell = state.projectData?.cells.find(c => c.id === state.selectedCellId);
-  const selectedRow = state.projectData?.rows.find(r => r.id === selectedCell?.rowId) ?? null;
+  // 選択中セルの行・列を特定(セル未作成の場合はID形式 `${rowId}-${colId}` から復元)
+  const selectedCellId = state.selectedCellId;
+  const selectedCell = state.projectData?.cells.find(c => c.id === selectedCellId);
+  let selectedRowId = selectedCell?.rowId;
+  let selectedColumnId = selectedCell?.columnId;
+  if (!selectedRowId && selectedCellId) {
+    const colIdx = selectedCellId.indexOf('-col-');
+    if (colIdx > 0) {
+      selectedRowId = selectedCellId.slice(0, colIdx);
+      selectedColumnId = selectedCellId.slice(colIdx + 1);
+    }
+  }
+  const selectedRow = state.projectData?.rows.find(r => r.id === selectedRowId) ?? null;
+  const selectedColumn = state.projectData?.columns.find(c => c.id === selectedColumnId) ?? null;
+  const [cellText, setCellText] = useState('');
+  const cellSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 選択セルが変わったらその内容をロード
+  useEffect(() => {
+    setCellText(selectedCell?.value ?? '');
+  }, [selectedCellId]);
+
+  const handleCellTextChange = (value: string) => {
+    setCellText(value);
+    if (cellSaveTimer.current) clearTimeout(cellSaveTimer.current);
+    cellSaveTimer.current = setTimeout(() => {
+      if (!selectedCellId || !selectedRow || !selectedColumn) return;
+      const base = selectedCell ?? {
+        id: selectedCellId,
+        rowId: selectedRow.id,
+        columnId: selectedColumn.id,
+        value: '',
+        annotation: '',
+      };
+      dispatch({ type: 'UPDATE_CELL', cell: { ...base, value } });
+    }, 500);
+  };
+
+  // 行番号は全体での並び順に基づく固定番号(DataTableの表示と同じ採番)
+  const selectedRowNumber = selectedRow && state.projectData
+    ? [...state.projectData.rows].sort((a, b) => a.order - b.order).findIndex(r => r.id === selectedRow.id) + 1
+    : null;
+
+  // 選択行の論文PDFのURL(行に保存されたURLを優先、旧データ用にURL形式のセルへフォールバック)
+  const selectedRowPdfUrl = (() => {
+    if (!selectedRow) return '';
+    const fromRow = (selectedRow.pdfUrl || '').trim();
+    if (fromRow) return fromRow;
+    const c = state.projectData?.cells.find(c => c.rowId === selectedRow.id && isUrl(c.value));
+    return c ? c.value.trim() : '';
+  })();
+
+  const draggingCellPanel = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
+
+  const onCellPanelDragStart = useCallback((e: React.MouseEvent) => {
+    draggingCellPanel.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = cellPanelHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (ev: MouseEvent) => {
+      if (!draggingCellPanel.current) return;
+      const delta = dragStartY.current - ev.clientY;
+      setCellPanelHeight(Math.max(80, Math.min(500, dragStartHeight.current + delta)));
+    };
+    const onUp = () => {
+      draggingCellPanel.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [cellPanelHeight]);
 
   const draggingLeft = useRef(false);
   const draggingRight = useRef(false);
@@ -235,9 +314,96 @@ export default function App() {
           </div>
         )}
 
-        {/* Center: Table */}
-        <div style={{ flex: 1, overflow: 'hidden', background: '#fff', minWidth: 0 }}>
-          <DataTable sortKey={sortKey} sortDir={sortDir} sortColId={sortColId} />
+        {/* Center: Table + Cell content */}
+        <div style={{ flex: 1, overflow: 'hidden', background: '#fff', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, overflow: 'hidden', minHeight: 0 }}>
+            <DataTable sortKey={sortKey} sortDir={sortDir} sortColId={sortColId} />
+          </div>
+          {/* Cell content panel */}
+          <div style={{
+            flexShrink: 0,
+            borderTop: '2px solid #e5e7eb',
+            display: 'flex',
+            flexDirection: 'column',
+            background: '#fafafa',
+            height: cellPanelOpen ? cellPanelHeight : 'auto',
+          }}>
+            {cellPanelOpen && (
+              <div
+                onMouseDown={onCellPanelDragStart}
+                title="ドラッグでサイズ変更"
+                style={{
+                  height: 5,
+                  cursor: 'row-resize',
+                  background: 'transparent',
+                  flexShrink: 0,
+                  position: 'relative',
+                  zIndex: 10,
+                }}
+              />
+            )}
+            <div style={{
+              padding: '4px 8px 4px 12px',
+              fontSize: 11,
+              fontWeight: 600,
+              color: '#6b7280',
+              background: '#f3f4f6',
+              borderBottom: cellPanelOpen ? '1px solid #e5e7eb' : 'none',
+              flexShrink: 0,
+              display: 'flex',
+              gap: 8,
+              alignItems: 'center',
+            }}>
+              <span>セル内容</span>
+              {selectedCell && (
+                <span style={{ color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {selectedColumn?.name}{selectedRowNumber ? ` — No.${selectedRowNumber}` : ''}
+                </span>
+              )}
+              <button
+                onClick={() => setCellPanelOpen(o => !o)}
+                title={cellPanelOpen ? 'パネルを閉じる' : 'パネルを開く'}
+                style={{
+                  marginLeft: 'auto',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#9ca3af',
+                  padding: '2px 4px',
+                  fontSize: 12,
+                  lineHeight: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {cellPanelOpen ? '▼' : '▲'}
+              </button>
+            </div>
+            {cellPanelOpen && (
+              <textarea
+                value={cellText}
+                onChange={e => handleCellTextChange(e.target.value)}
+                spellCheck={false}
+                placeholder={selectedRow && selectedColumn ? 'セルの内容を入力...' : 'セルを選択すると内容を表示・編集できます'}
+                disabled={!selectedRow || !selectedColumn}
+                style={{
+                  flex: 1,
+                  width: '100%',
+                  border: 'none',
+                  outline: 'none',
+                  resize: 'none',
+                  padding: '8px 12px',
+                  fontSize: 13,
+                  fontFamily: 'inherit',
+                  background: '#fafafa',
+                  color: '#1f2937',
+                  lineHeight: 1.7,
+                  boxSizing: 'border-box',
+                  minHeight: 0,
+                }}
+              />
+            )}
+          </div>
         </div>
 
         {/* Right: Memo */}
@@ -273,8 +439,28 @@ export default function App() {
                 alignItems: 'center',
               }}>
                 <span>メモ</span>
-                {selectedRow && (
-                  <span style={{ color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedRow.name}</span>
+                {selectedRowNumber && (
+                  <span style={{ color: '#374151', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>No.{selectedRowNumber}</span>
+                )}
+                {selectedRowPdfUrl && (
+                  <button
+                    onClick={() => window.open(selectedRowPdfUrl, '_blank', 'noopener,noreferrer')}
+                    title="論文PDFを開く"
+                    style={{
+                      padding: '1px 8px',
+                      fontSize: 11,
+                      background: '#f3f4f6',
+                      border: '1px solid #d1d5db',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      color: '#374151',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
+                  >
+                    PDF
+                  </button>
                 )}
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, flexShrink: 0 }}>
                   {(['edit', 'preview'] as const).map(mode => {
@@ -339,6 +525,10 @@ export default function App() {
                       components={{
                         // 改行1回(<br>)の行送りを折り返しより4px広げる
                         br: () => <span style={{ display: 'block', height: 4 }} />,
+                        // リンクは新規タブで開く
+                        a: ({ node: _node, ...props }) => (
+                          <a {...props} target="_blank" rel="noopener noreferrer" />
+                        ),
                       }}
                     >
                       {memoText}
