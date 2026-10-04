@@ -39,6 +39,24 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
   const colWidth = (col: Column) => colWidths[col.id] ?? (col.id === 'col-name' ? 160 : 200);
   const resizingCol = useRef<{ id: string; startX: number; startW: number } | null>(null);
 
+  // 行ごとの最終クリック時刻(No.セル・各セルのクリックで更新、プロジェクトごとにlocalStorageへ保存)
+  const rowClicksKey = `structured-memo-ui-row-clicks-${state.currentProjectId}`;
+  const [rowClickTimes, setRowClickTimes] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(rowClicksKey) || '{}');
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(rowClicksKey, JSON.stringify(rowClickTimes));
+  }, [rowClicksKey, rowClickTimes]);
+  const markRowClicked = (rowId: string) => {
+    setRowClickTimes(prev => ({ ...prev, [rowId]: Date.now() }));
+  };
+  // No.ヘッダークリック時に確定した並び順(行idの配列)。null = 無効
+  const [clickSortOrder, setClickSortOrder] = useState<string[] | null>(null);
+
   const handleColResizeStart = (e: React.MouseEvent, colId: string, startW: number) => {
     e.preventDefault();
     e.stopPropagation();
@@ -102,6 +120,12 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
         })
       : rows;
 
+    // No.ヘッダーのクリック順ソートが有効ならそれを優先(ヘッダークリック時点の順で固定)
+    if (clickSortOrder) {
+      const idx = new Map(clickSortOrder.map((id, i) => [id, i]));
+      return [...base].sort((a, b) => (idx.get(a.id) ?? Infinity) - (idx.get(b.id) ?? Infinity));
+    }
+
     if (sortKey === 'none' || !sortColId) return base;
 
     const getCellStat = (row: Row) => {
@@ -130,8 +154,21 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
   const getInterest = (cellId: string) =>
     state.projectData!.interests.find(i => i.cellId === cellId);
 
-  const handleCellClick = (cellId: string) => {
+  const handleCellClick = (rowId: string, cellId: string) => {
+    markRowClicked(rowId);
     dispatch({ type: 'SELECT_CELL', cellId });
+  };
+
+  // No.ヘッダークリック: 最後にクリックした行(セルクリック含む)が上に来るよう並び替え。再クリックで解除
+  const handleNoHeaderClick = () => {
+    if (clickSortOrder) {
+      setClickSortOrder(null);
+      return;
+    }
+    const order = [...rows]
+      .sort((a, b) => (rowClickTimes[b.id] ?? 0) - (rowClickTimes[a.id] ?? 0))
+      .map(r => r.id);
+    setClickSortOrder(order);
   };
 
   const handleRowDragStart = (rowId: string) => {
@@ -305,24 +342,28 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
           <thead>
             <tr>
               <th
-                title="ドラッグで行を並び替え / クリックで行の全項目を表示"
+                onClick={handleNoHeaderClick}
+                title={clickSortOrder
+                  ? 'クリック順ソート中(新しい順) / クリックで解除'
+                  : 'クリックで最後に選択した行・セルが上に来るよう並び替え'}
                 style={{
                   padding: '8px 6px',
-                  background: '#f3f4f6',
+                  background: clickSortOrder ? '#dbeafe' : '#f3f4f6',
                   borderBottom: '2px solid #e5e7eb',
                   borderRight: '1px solid #e5e7eb',
                   textAlign: 'center',
                   fontSize: 12,
                   fontWeight: 600,
-                  color: '#374151',
+                  color: clickSortOrder ? '#1d4ed8' : '#374151',
                   position: 'sticky',
                   top: 0,
                   left: 0,
                   zIndex: 3,
                   width: 44,
+                  cursor: 'pointer',
                 }}
               >
-                No.
+                No.{clickSortOrder && <span style={{ fontSize: 11, color: '#3b82f6', fontWeight: 700 }}>↓</span>}
               </th>
               {columns.map(col => (
                 <th
@@ -394,7 +435,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                   draggable
                   onDragStart={() => handleRowDragStart(row.id)}
                   onDragEnd={handleRowDragEnd}
-                  onClick={() => setRowDetailRow(row)}
+                  onClick={() => { markRowClicked(row.id); setRowDetailRow(row); }}
                   title="ドラッグで行を並び替え / クリックで行の全項目を表示"
                   style={{
                     padding: '8px 6px',
@@ -423,7 +464,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
                   return (
                     <td
                       key={col.id}
-                      onClick={() => handleCellClick(cellId)}
+                      onClick={() => handleCellClick(row.id, cellId)}
                       style={{
                         padding: '8px 10px',
                         borderBottom: '1px solid #e5e7eb',
