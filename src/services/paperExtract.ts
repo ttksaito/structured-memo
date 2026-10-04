@@ -29,8 +29,21 @@ export const PAPER_META_COLUMN = '著者/日付/タイトル';
 // 抽出対象のデフォルト列名(無ければ自動作成される)
 export const PAPER_SECTION_COLUMNS = ['概要', '背景', '目的', '方法', '結果', '新規性', '限界', '課題'] as const;
 
+// 抽出プロンプトを投げない列名(メタ情報列・PDF列)
+export const PAPER_NON_SECTION_COLUMNS = new Set<string>([PAPER_META_COLUMN, '著者', '日付', 'PDF']);
+
+// プロンプト1の本文(プロンプト確認モーダルでも表示する)
+export const META_PROMPT = 'この論文PDFの著者・日付・タイトルを読み取り、save_paper_meta ツールで保存してください。';
+
+// プロンプト2以降の本文(列ごとに1つ。プロンプト確認モーダルでも表示する)
+export function buildSectionPrompt(target: PaperSectionTarget): string {
+  const hint = target.description?.trim() ? `(この項目の意味: ${target.description.trim()})\n` : '';
+  return `この論文の「${target.name}」を日本語300字以内で整理してください。\n${hint}論文の内容に忠実に、前置きや見出しなしで本文だけを出力してください。300字を超えないよう要点を絞り、最後の文は必ず完結させてください。`;
+}
+
 const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-5';
+export const PAPER_MODEL = 'claude-sonnet-5';
+const MODEL = PAPER_MODEL;
 
 const META_TOOL = {
   name: 'save_paper_meta',
@@ -111,7 +124,7 @@ async function extractMeta(apiKey: string, pdfBase64: string, acc: PaperUsage): 
         role: 'user',
         content: [
           pdfBlock(pdfBase64),
-          { type: 'text', text: 'この論文PDFの著者・日付・タイトルを読み取り、save_paper_meta ツールで保存してください。' },
+          { type: 'text', text: META_PROMPT },
         ],
       },
     ],
@@ -134,7 +147,6 @@ async function extractMeta(apiKey: string, pdfBase64: string, acc: PaperUsage): 
 
 // プロンプト2以降: 1列につき1プロンプト
 async function extractSection(apiKey: string, pdfBase64: string, target: PaperSectionTarget, acc: PaperUsage): Promise<string> {
-  const hint = target.description?.trim() ? `(この項目の意味: ${target.description.trim()})\n` : '';
   const data = await callClaude(apiKey, {
     model: MODEL,
     max_tokens: 2048,
@@ -144,10 +156,7 @@ async function extractSection(apiKey: string, pdfBase64: string, target: PaperSe
         role: 'user',
         content: [
           pdfBlock(pdfBase64),
-          {
-            type: 'text',
-            text: `この論文の「${target.name}」を日本語300字以内で整理してください。\n${hint}論文の内容に忠実に、前置きや見出しなしで本文だけを出力してください。300字を超えないよう要点を絞り、最後の文は必ず完結させてください。`,
-          },
+          { type: 'text', text: buildSectionPrompt(target) },
         ],
       },
     ],

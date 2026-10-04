@@ -3,6 +3,10 @@ import { useApp } from '../../store/ProjectContext';
 import { Column } from '../../types';
 import { Modal } from '../common/Modal';
 import { loadCostLog, CostLogEntry } from '../../services/costLog';
+import {
+  META_PROMPT, buildSectionPrompt, PAPER_MODEL,
+  PAPER_META_COLUMN, PAPER_SECTION_COLUMNS, PAPER_NON_SECTION_COLUMNS,
+} from '../../services/paperExtract';
 
 export function ColumnNav({ onToggle }: { onToggle?: () => void }) {
   const { state, dispatch } = useApp();
@@ -11,6 +15,7 @@ export function ColumnNav({ onToggle }: { onToggle?: () => void }) {
   const [newColName, setNewColName] = useState('');
   const [newColDesc, setNewColDesc] = useState('');
   const [showCosts, setShowCosts] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(false);
   const [openDays, setOpenDays] = useState<Set<string>>(new Set());
   const [costEntries, setCostEntries] = useState<CostLogEntry[] | null>(null);
   const [costError, setCostError] = useState('');
@@ -189,6 +194,75 @@ export function ColumnNav({ onToggle }: { onToggle?: () => void }) {
       >
         💰 コスト
       </button>
+
+      <button
+        onClick={() => setShowPrompts(true)}
+        title="論文PDF取り込み時にClaudeへ送るプロンプトを表示"
+        style={{
+          flexShrink: 0,
+          marginTop: 6,
+          width: '100%',
+          background: '#fff',
+          color: '#374151',
+          border: '1px solid #d1d5db',
+          borderRadius: 4,
+          padding: '6px 10px',
+          fontSize: 12,
+          cursor: 'pointer',
+          fontWeight: 600,
+        }}
+      >
+        📝 プロンプト
+      </button>
+
+      {/* プロンプト確認モーダル(現在の列構成から取り込み時の送信内容を組み立てて表示) */}
+      <Modal open={showPrompts} onClose={() => setShowPrompts(false)} title="取り込みプロンプト（論文PDF）" maxWidth={640}>
+        {showPrompts && (() => {
+          // 取り込み処理と同じロジック: 不足している定型列は自動作成されるため、ここでも補って表示する
+          const cols = [...state.projectData!.columns].sort((a, b) => a.order - b.order);
+          const existing = new Set(cols.map(c => c.name));
+          const autoCreated = [PAPER_META_COLUMN, ...PAPER_SECTION_COLUMNS].filter(n => !existing.has(n));
+          const sectionTargets = [
+            ...cols.filter(c => c.id !== 'col-name' && !PAPER_NON_SECTION_COLUMNS.has(c.name))
+              .map(c => ({ name: c.name, description: c.description })),
+            ...autoCreated.filter(n => !PAPER_NON_SECTION_COLUMNS.has(n))
+              .map(n => ({ name: n, description: '' })),
+          ];
+          const promptBoxStyle: React.CSSProperties = {
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            fontSize: 12,
+            lineHeight: 1.7,
+            color: '#1f2937',
+            background: '#f9fafb',
+            border: '1px solid #e5e7eb',
+            borderRadius: 6,
+            padding: '8px 10px',
+            marginTop: 4,
+          };
+          const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#6b7280' };
+          return (
+            <div style={{ maxHeight: '65vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 12, color: '#6b7280', lineHeight: 1.7 }}>
+                PDFを取り込むと、以下のプロンプトが1つずつ順番にClaude（{PAPER_MODEL}）へ送られます。
+                各プロンプトには論文PDF全体が添付されます。列の「説明」を設定すると、その列のプロンプトにヒントとして追記されます。
+              </div>
+              <div>
+                <div style={labelStyle}>1. 著者/日付/タイトル（save_paper_metaツールで構造化出力）</div>
+                <div style={promptBoxStyle}>{META_PROMPT}</div>
+              </div>
+              {sectionTargets.map((t, i) => (
+                <div key={t.name}>
+                  <div style={labelStyle}>
+                    {i + 2}. {t.name}{autoCreated.includes(t.name) ? '（取り込み時に自動作成される列）' : ''}
+                  </div>
+                  <div style={promptBoxStyle}>{buildSectionPrompt(t)}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </Modal>
 
       {/* APIコストモーダル(日別 → PDF別) */}
       <Modal open={showCosts} onClose={() => setShowCosts(false)} title="APIコスト（論文取り込み）" maxWidth={640}>

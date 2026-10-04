@@ -3,7 +3,7 @@ import { useApp } from '../../store/ProjectContext';
 import { calcAttentionScore, scoreToColor } from '../../utils/interest';
 import { Row, Column, Cell } from '../../types';
 import { Modal } from '../common/Modal';
-import { extractPaperInfo, PAPER_META_COLUMN, PAPER_SECTION_COLUMNS } from '../../services/paperExtract';
+import { extractPaperInfo, PAPER_META_COLUMN, PAPER_SECTION_COLUMNS, PAPER_NON_SECTION_COLUMNS } from '../../services/paperExtract';
 import { uploadPaperPdf } from '../../services/paperStorage';
 import { appendCostLog } from '../../services/costLog';
 import { SortKey, SortDir } from './TableToolbar';
@@ -228,9 +228,8 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
       });
 
       // 3. 列ごとに1プロンプトずつ順番にClaudeへ投げて抽出
-      const nonSectionNames = new Set([PAPER_META_COLUMN, '著者', '日付', 'PDF']);
       const sectionTargets = allCols
-        .filter(c => c.id !== 'col-name' && !nonSectionNames.has(c.name))
+        .filter(c => c.id !== 'col-name' && !PAPER_NON_SECTION_COLUMNS.has(c.name))
         .sort((a, b) => a.order - b.order)
         .map(c => ({ name: c.name, description: c.description }));
       const base64 = await readFileAsBase64(file);
