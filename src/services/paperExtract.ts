@@ -19,6 +19,8 @@ export interface PaperInfo {
   metaText: string; // 「著者/日付/タイトル」列用の整形テキスト
   authors: string;
   date: string;
+  firstAuthorSurname: string; // 筆頭著者の姓(ローマ字。ファイル名用)
+  year: string; // 出版年(西暦4桁。ファイル名用)
   sections: Record<string, string>; // 列名(概要/背景/...) → 内容
   usage: PaperUsage; // 取り込み全体で消費したトークン数
 }
@@ -55,8 +57,10 @@ const META_TOOL = {
       date: { type: 'string', description: '出版日または発表日(例: 2024年2月29日、2023年5月)' },
       title: { type: 'string', description: '論文タイトル(原文のまま)' },
       title_ja: { type: 'string', description: 'タイトルの日本語訳(原文が日本語の場合は省略)' },
+      first_author_surname: { type: 'string', description: '筆頭著者の姓(ローマ字表記。例: Smith, Tanaka)' },
+      year: { type: 'string', description: '出版年(西暦4桁。例: 2024)' },
     },
-    required: ['authors', 'date', 'title'],
+    required: ['authors', 'date', 'title', 'first_author_surname', 'year'],
   },
 } as const;
 
@@ -111,6 +115,16 @@ function truncate(text: string, max = 300): string {
   return lastEnd >= max * 0.5 ? cut.slice(0, lastEnd + 1) : cut;
 }
 
+// 著者欄「Smith, J., Tanaka, K.」「John Smith, Ken Tanaka」などから筆頭著者の姓を推定する
+function guessSurname(authors: string): string {
+  const first = (authors || '').split(/[,;、]/)[0]?.trim() || '';
+  const parts = first.split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  // 「Smith J.」のようにイニシャルが後ろに来る形式なら先頭、それ以外は末尾を姓とみなす
+  const last = parts[parts.length - 1];
+  return /^[A-Z]\.?$/.test(last) && parts.length > 1 ? parts[0] : last;
+}
+
 // プロンプト1: 著者/日付/タイトル
 async function extractMeta(apiKey: string, pdfBase64: string, acc: PaperUsage): Promise<Omit<PaperInfo, 'sections' | 'usage'>> {
   const data = await callClaude(apiKey, {
@@ -142,7 +156,11 @@ async function extractMeta(apiKey: string, pdfBase64: string, acc: PaperUsage): 
   const title = titleJa && titleJa !== titleRaw ? `${titleJa}（${titleRaw}）` : titleRaw;
   const metaText = `・著者: ${authors}\n・日付: ${date}\n・タイトル: ${title}`;
 
-  return { title, authors, date, metaText };
+  // ファイル名用の姓・年(ツール出力が無い場合は著者欄・日付欄から推定)
+  const firstAuthorSurname = (input.first_author_surname || '').trim() || guessSurname(authors);
+  const year = (input.year || '').trim().match(/\d{4}/)?.[0] || date.match(/\d{4}/)?.[0] || '';
+
+  return { title, authors, date, metaText, firstAuthorSurname, year };
 }
 
 // プロンプト2以降: 1列につき1プロンプト

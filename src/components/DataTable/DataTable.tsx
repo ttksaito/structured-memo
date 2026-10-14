@@ -4,7 +4,7 @@ import { calcAttentionScore, scoreToColor } from '../../utils/interest';
 import { Row, Column, Cell } from '../../types';
 import { Modal } from '../common/Modal';
 import { extractPaperInfo, PAPER_META_COLUMN, PAPER_SECTION_COLUMNS, PAPER_NON_SECTION_COLUMNS } from '../../services/paperExtract';
-import { uploadPaperPdf } from '../../services/paperStorage';
+import { uploadPaperPdf, buildPaperFileName } from '../../services/paperStorage';
 import { appendCostLog } from '../../services/costLog';
 import { SortKey, SortDir } from './TableToolbar';
 
@@ -241,17 +241,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
     const projectId = state.currentProjectId!;
 
     try {
-      // 1. PDFをSupabase Storageへ保存
-      setPaperPhase(`「${file.name}」をアップロード中...`);
-      let pdfUrl = '';
-      let uploadError = '';
-      try {
-        pdfUrl = await uploadPaperPdf(file, projectId);
-      } catch (e) {
-        uploadError = e instanceof Error ? e.message : String(e);
-      }
-
-      // 2. 不足している列を自動作成(この列構成に応じて抽出プロンプトの数が決まる)
+      // 1. 不足している列を自動作成(この列構成に応じて抽出プロンプトの数が決まる)
       // PDFのURLは行(row.pdfUrl)に保存するため、PDF列は自動作成しない(既存のPDF列があれば埋める)
       const paperColumnNames = [PAPER_META_COLUMN, ...PAPER_SECTION_COLUMNS];
       const allCols = [...state.projectData!.columns];
@@ -264,7 +254,7 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
         }
       });
 
-      // 3. 列ごとに1プロンプトずつ順番にClaudeへ投げて抽出
+      // 2. 列ごとに1プロンプトずつ順番にClaudeへ投げて抽出
       const sectionTargets = allCols
         .filter(c => c.id !== 'col-name' && !PAPER_NON_SECTION_COLUMNS.has(c.name))
         .sort((a, b) => a.order - b.order)
@@ -273,6 +263,17 @@ export function DataTable({ sortKey, sortDir, sortColId }: DataTableProps) {
       const info = await extractPaperInfo(state.apiKey, base64, sectionTargets, setPaperPhase);
       appendCostLog({ date: new Date().toISOString(), projectId, title: info.title, ...info.usage })
         .catch(e => console.error('コスト記録の保存に失敗(取り込み自体は成功):', e));
+
+      // 3. PDFを「作者名(年度).pdf」の名前でSupabase Storageへ保存
+      const pdfFileName = buildPaperFileName(info.firstAuthorSurname, info.year);
+      setPaperPhase(`「${pdfFileName}」としてアップロード中...`);
+      let pdfUrl = '';
+      let uploadError = '';
+      try {
+        pdfUrl = await uploadPaperPdf(file, projectId, pdfFileName);
+      } catch (e) {
+        uploadError = e instanceof Error ? e.message : String(e);
+      }
 
       // 4. 行を作成し、列名の一致で各セルに保存
       setPaperPhase('結果を保存中...');
